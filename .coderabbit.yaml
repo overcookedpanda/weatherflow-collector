@@ -2,7 +2,14 @@
 language: en-US
 reviews:
   profile: chill
-  request_changes_workflow: false
+  # Request changes when a review has actionable comments, and approve once
+  # they're resolved and no pre-merge check fails. The ruleset on main
+  # requires one approval, so CodeRabbit's objections block the merge.
+  auto_approvals:
+    enabled: true
+  # A review that errors out fails the required CodeRabbit check instead of
+  # passing it.
+  fail_commit_status: true
   high_level_summary: true
   poem: false
   review_status: true
