@@ -29,6 +29,7 @@ import math
 import re
 import threading
 import time
+from collections import deque
 
 SNAPSHOT_MEASUREMENTS = {
     "weatherflow_forecast_current",
@@ -48,6 +49,9 @@ OBSERVED_TIMESTAMP_SUFFIX = "observed_timestamp_seconds"
 
 # Readings stamped this far in the future are treated as clock skew.
 FUTURE_TOLERANCE_SECONDS = 300
+# Recent reading times kept per running total, so a repeat is not counted twice
+# even when other readings arrive in between.
+COUNTED_READINGS_KEPT = 16
 
 _INVALID_NAME = re.compile(r"[^a-zA-Z0-9_:]")
 _INVALID_LABEL = re.compile(r"[^a-zA-Z0-9_]")
@@ -135,8 +139,7 @@ class MetricStore:
         self._warned_full = False
         self._warned_queue = False
         self._counter_names = set()
-        # total key -> timestamp of the last reading counted into it
-        self._counted_reading = {}
+        self._counted_reading = {}  # total key -> recent reading times counted into it
 
     # Input
 
@@ -227,10 +230,14 @@ class MetricStore:
                     is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
                     if field in counted and is_new:
                         total_key = (name + "_total", label_items)
-                        if self._counted_reading.get(total_key) != reading_ts and (
+                        recent = self._counted_reading.get(total_key)
+                        if (recent is None or reading_ts not in recent) and (
                             self._add_to_total(total_key, value, sample_ts, order_ts, now)
                         ):
-                            self._counted_reading[total_key] = reading_ts
+                            if recent is None:
+                                recent = deque(maxlen=COUNTED_READINGS_KEPT)
+                                self._counted_reading[total_key] = recent
+                            recent.append(reading_ts)
 
     def _has_room(self):
         if len(self._latest) < self.max_series:
