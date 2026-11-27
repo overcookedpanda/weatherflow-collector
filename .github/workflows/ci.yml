@@ -81,7 +81,7 @@ jobs:
             --entrypoint /venv/bin/python3 weatherflow-collector:ci \
             -c "import sys; sys.path.insert(0, '/app'); import aiohttp, influxdb_client, websockets, config, station_metadata_manager; print('ok')"
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: weatherflow-collector:ci
           severity: HIGH,CRITICAL
