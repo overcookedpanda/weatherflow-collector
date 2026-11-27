@@ -113,7 +113,7 @@ accept old samples. Other settings, with defaults:
 | `MAX_SAMPLE_AGE` (seconds; older observations are skipped) | 600 |
 | `MAX_SERIES` | 10000 |
 
-Prometheus versions of the dashboards are in `grafana/dashboards/prometheus`.
+Prometheus versions of the dashboards are in `grafana/dashboards/prometheus`: current conditions, forecast, and collector health. Import them into Grafana and pick your Prometheus data source when asked. They are built by `scripts/build_prometheus_dashboards.py`; edit that script and rerun it rather than editing the JSON, and a test checks the two match. Values are in the units the Tempest reports (Celsius, m/s, mb, mm), so change a panel's unit in Grafana if you prefer others.
 
 ## Websocket server
 
