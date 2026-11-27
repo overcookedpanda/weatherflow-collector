@@ -59,6 +59,7 @@ from processor.collector_data import CollectorDataProcessor
 from station_metadata_manager import StationMetadataManager
 from handlers.handler import Handler
 from storage.influxdb import InfluxDBStorage
+from storage.prometheus import PrometheusStorage
 from handlers.system_metrics import SystemMetricsHandler
 from provider.websocket_server import WebSocketServerProvider
 from config_validator import validate_all
@@ -103,6 +104,15 @@ async def setup_app():
         event_manager.subscribe("influxdb_storage_event", handler_influxdb)
     else:
         logger_main.info("handler_influxdb disabled.")
+
+    if config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_ENABLED:
+        logger_main.info("handler_prometheus enabled.")
+        handler_prometheus = PrometheusStorage(event_manager)
+        # Same events as InfluxDB, so both outputs can run at once.
+        event_manager.subscribe("influxdb_storage_event", handler_prometheus)
+        await handler_prometheus.start()
+    else:
+        logger_main.info("handler_prometheus disabled.")
 
     if config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED:
         logger_main.info("websocket_server_provider enabled.")

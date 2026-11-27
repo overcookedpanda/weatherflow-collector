@@ -1,5 +1,7 @@
 # config_validator.py
 
+import os
+
 import config
 import logger
 
@@ -109,14 +111,73 @@ def validate_module_enablement():
         "Provider WebSocket Server",
         config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED,
     )
+    log_module_status(
+        "Storage Prometheus scrape endpoint",
+        config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_ENABLED,
+    )
+    log_module_status(
+        "Storage Prometheus remote write",
+        config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED,
+    )
     log_module_status("Handler", config.WEATHERFLOW_COLLECTOR_HANDLER_ENABLED)
 
     return True
 
 
+REMOTE_WRITE_AUTH_MODES = ("none", "sigv4", "basic", "bearer")
+
+
+def validate_prometheus_config():
+    """Check the Prometheus remote write settings. Secrets are never logged."""
+    if not config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED:
+        return True
+
+    problems = []
+    url = config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_URL
+    auth = config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH
+    if not url:
+        problems.append("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_URL is not set")
+    elif not url.startswith("https://") and auth != "none":
+        problems.append("the remote write URL must use https when credentials are sent")
+
+    if auth not in REMOTE_WRITE_AUTH_MODES:
+        problems.append(
+            "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH must be one of "
+            + ", ".join(REMOTE_WRITE_AUTH_MODES)
+        )
+    elif auth == "sigv4":
+        if not config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_SIGV4_REGION:
+            problems.append(
+                "set WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_SIGV4_REGION "
+                "or AWS_REGION for sigv4"
+            )
+        for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+            if not os.environ.get(name):
+                problems.append(f"{name} is not set, and sigv4 needs it")
+    elif auth == "basic":
+        if not config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_USERNAME:
+            problems.append("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_USERNAME is not set")
+        if not config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_PASSWORD:
+            problems.append("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_PASSWORD is not set")
+    elif auth == "bearer":
+        if not config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_BEARER_TOKEN:
+            problems.append("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_BEARER_TOKEN is not set")
+
+    if config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_INTERVAL < 1:
+        problems.append("the remote write interval must be at least 1 second")
+
+    for problem in problems:
+        logger_ConfigValidator.error(f"Prometheus remote write: {problem}.")
+    if not problems:
+        logger_ConfigValidator.info(f"Prometheus remote write auth: {auth}")
+    return not problems
+
+
 def validate_all():
-    return (
-        validate_api_config()
-        and validate_module_enablement()
-        and validate_influxdb_config()
-    )
+    results = [validate_api_config(), validate_module_enablement()]
+    # Only check the outputs that are turned on, so a Prometheus-only setup
+    # doesn't need InfluxDB settings.
+    if config.WEATHERFLOW_COLLECTOR_STORAGE_INFLUXDB_ENABLED:
+        results.append(validate_influxdb_config())
+    results.append(validate_prometheus_config())
+    return all(results)

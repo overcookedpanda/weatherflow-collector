@@ -3,5 +3,11 @@
 useDefault = true
 
 [allowlist]
-description = "Placeholder values in templates and docs"
-regexes = ['''<YOUR_[A-Z_]+>''', '''test-token''']
+description = "Placeholder values in templates and docs, and AWS's published SigV4 example key"
+regexes = [
+  '''<YOUR_[A-Z_]+>''',
+  '''test-token''',
+  '''example-(token|secret|session-token)''',
+  '''AKIDEXAMPLE''',
+  '''wJalrXUtnFEMI/K7MDENG\+bPxRfiCYEXAMPLEKEY''',
+]

@@ -124,6 +124,7 @@ class CustomFormatter(logging.Formatter):
         "station_metadata_manager": "magenta",
         "storage": "dark_magenta",
         "storage.influxdb.InfluxDBStorage": "dark_magenta",
+        "storage.prometheus.PrometheusStorage": "dark_magenta",
         "utils": "light_cyan",
         "utils.calculate_weather_metrics.CalculateWeatherMetrics": "light_cyan",
         "utils.utils.SingletonMeta": "light_cyan",
