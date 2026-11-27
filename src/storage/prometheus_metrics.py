@@ -227,9 +227,10 @@ class MetricStore:
                     is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
                     if field in counted and is_new:
                         total_key = (name + "_total", label_items)
-                        if self._counted_reading.get(total_key) != reading_ts:
-                            self._counted_reading[total_key] = reading_ts
+                        if self._counted_reading.get(total_key) != reading_ts and (
                             self._add_to_total(total_key, value, sample_ts, order_ts, now)
+                        ):
+                            self._counted_reading[total_key] = reading_ts
 
     def _has_room(self):
         if len(self._latest) < self.max_series:
@@ -256,13 +257,15 @@ class MetricStore:
         return is_new
 
     def _add_to_total(self, key, increment, sample_ts, order_ts, now):
+        """Add to a running total; returns False when there was no room for it."""
         current = self._latest.get(key)
         if current is None and not self._has_room():
-            return
+            return False
         total = (current[0] if current else 0.0) + increment
         self._latest[key] = [total, order_ts, now]
         self._counter_names.add(key[0])
         self._enqueue(key, total, sample_ts)
+        return True
 
     def _enqueue(self, key, value, sample_ts):
         if self.queue_samples:

@@ -240,3 +240,12 @@ def test_future_dated_lightning_repeat_is_counted_once():
         store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": strikes}, ts)
     found = {name: value for (name, _labels), value in series(store).items()}
     assert found["weatherflow_obs_lightning_strike_count_total"] == 5.0
+
+
+def test_total_dropped_for_lack_of_room_leaves_no_dedup_entry():
+    store = make_store(max_series=2)
+    store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": 2}, NOW - 60)
+    # The value and observed-time series fill the store, so the total is dropped.
+    found = {name for (name, _labels) in series(store)}
+    assert "weatherflow_obs_lightning_strike_count_total" not in found
+    assert store._counted_reading == {}
