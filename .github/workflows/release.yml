@@ -134,21 +134,48 @@ jobs:
 
       # 5. Only now point the tags at the verified digest. A single index
       #    source is copied as is, so each tag gets the same digest.
+      #
+      #    Queued runs may start out of push order, so a main run moves
+      #    latest only while its commit is still the head of main. A push
+      #    that lands after this check queues its own release behind this
+      #    one, and that later run moves latest forward. Version and sha
+      #    tags don't depend on this check.
       - name: Tag the verified digest
+        id: tag
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          keep_latest=true
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            head=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')
+            if [ "$head" != "${GITHUB_SHA}" ]; then
+              keep_latest=false
+              echo "::notice::main is now at ${head}; leaving latest where it is"
+            fi
+          fi
           args=()
+          final=""
           while IFS= read -r tag; do
-            [ -n "$tag" ] && args+=(--tag "$tag")
+            [ -z "$tag" ] && continue
+            if [ "${tag}" = "${IMAGE}:latest" ] && [ "$keep_latest" = false ]; then
+              continue
+            fi
+            args+=(--tag "$tag")
+            final+="${tag}"$'\n'
           done <<< "$TAGS"
           docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
+          {
+            echo "tags<<EOF_TAGS"
+            printf '%s' "$final"
+            echo "EOF_TAGS"
+          } >> "$GITHUB_OUTPUT"
       - name: Confirm tags match the verified digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
+          TAGS: ${{ steps.tag.outputs.tags }}
         run: |
           set -euo pipefail
           while IFS= read -r tag; do
