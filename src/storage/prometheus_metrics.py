@@ -29,7 +29,6 @@ import math
 import re
 import threading
 import time
-from collections import deque
 
 SNAPSHOT_MEASUREMENTS = {
     "weatherflow_forecast_current",
@@ -49,9 +48,6 @@ OBSERVED_TIMESTAMP_SUFFIX = "observed_timestamp_seconds"
 
 # Readings stamped this far in the future are treated as clock skew.
 FUTURE_TOLERANCE_SECONDS = 300
-# Recent reading times kept per running total, so a repeat is not counted twice
-# even when other readings arrive in between.
-COUNTED_READINGS_KEPT = 16
 
 _INVALID_NAME = re.compile(r"[^a-zA-Z0-9_:]")
 _INVALID_LABEL = re.compile(r"[^a-zA-Z0-9_]")
@@ -139,7 +135,8 @@ class MetricStore:
         self._warned_full = False
         self._warned_queue = False
         self._counter_names = set()
-        self._counted_reading = {}  # total key -> recent reading times counted into it
+        # total key -> latest future-dated reading time counted into it
+        self._counted_reading = {}
 
     # Input
 
@@ -173,6 +170,7 @@ class MetricStore:
         # A reading's own time, kept even when the sample time is corrected,
         # so a repeat of the same reading is never counted twice.
         reading_ts = ts
+        corrected = False  # True when a future-dated time was replaced by the clock
         labels = {
             label_name(k): str(v)
             for k, v in tags.items()
@@ -198,6 +196,7 @@ class MetricStore:
             sample_ts, order_ts = now, now
         else:
             if ts is None or ts > now + FUTURE_TOLERANCE_SECONDS:
+                corrected = ts is not None
                 ts = now
             if now - ts > self.max_sample_age:
                 return
@@ -230,14 +229,20 @@ class MetricStore:
                     is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
                     if field in counted and is_new:
                         total_key = (name + "_total", label_items)
-                        recent = self._counted_reading.get(total_key)
-                        if (recent is None or reading_ts not in recent) and (
+                        if corrected:
+                            # The clock replaced this reading's time, so _record
+                            # cannot spot a replay. Count it only when it is later
+                            # than the last future-dated reading counted, as
+                            # _record does for readings with a usable time. One
+                            # number per total keeps memory bounded.
+                            last = self._counted_reading.get(total_key)
+                            if last is not None and reading_ts <= last:
+                                continue
+                        if (
                             self._add_to_total(total_key, value, sample_ts, order_ts, now)
+                            and corrected
                         ):
-                            if recent is None:
-                                recent = deque(maxlen=COUNTED_READINGS_KEPT)
-                                self._counted_reading[total_key] = recent
-                            recent.append(reading_ts)
+                            self._counted_reading[total_key] = reading_ts
 
     def _has_room(self):
         if len(self._latest) < self.max_series:
