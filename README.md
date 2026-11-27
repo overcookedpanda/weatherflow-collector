@@ -75,12 +75,12 @@ IMAGE=ghcr.io/overcookedpanda/weatherflow-collector
 DIGEST=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{ .Manifest.Digest }}')
 cosign verify "$IMAGE@$DIGEST" \
   --certificate-identity-regexp '^https://github.com/overcookedpanda/weatherflow-collector/\.github/workflows/release\.yml@refs/(heads/main|tags/v.+)$' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null \
-  && echo "Verified: $IMAGE@$DIGEST"
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+echo "Verified: $IMAGE@$DIGEST"
 ```
 
-`set -eu` stops at the first failure, and the reference is printed only after
-the verify succeeds. Use the printed `image@sha256:...` reference as the image
+`set -eu` stops at the first failed command, so the reference is printed only
+after the verify succeeds. Use the printed `image@sha256:...` reference as the image
 in your compose file. If nothing is printed, don't deploy.
 
 ## Development
