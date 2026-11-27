@@ -5318,8 +5318,8 @@
       {
         "current": {
           "selected": false,
-          "text": "122367",
-          "value": "122367"
+          "text": "",
+          "value": ""
         },
         "datasource": {
           "type": "influxdb",

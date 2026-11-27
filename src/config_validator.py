@@ -74,15 +74,7 @@ def validate_module_enablement():
 
     # Log the status for each module
     log_module_status(
-        "Collector Export", config.WEATHERFLOW_COLLECTOR_COLLECTOR_EXPORT_ENABLED
-    )
-    log_module_status("Storage File", config.WEATHERFLOW_COLLECTOR_STORAGE_FILE_ENABLED)
-    log_module_status(
         "Storage InfluxDB", config.WEATHERFLOW_COLLECTOR_STORAGE_INFLUXDB_ENABLED
-    )
-    log_module_status(
-        "Collector REST Export",
-        config.WEATHERFLOW_COLLECTOR_COLLECTOR_REST_EXPORT_ENABLED,
     )
     log_module_status(
         "Collector REST Forecasts",
@@ -112,10 +104,6 @@ def validate_module_enablement():
     )
     log_module_status(
         "Collector WebSocket", config.WEATHERFLOW_COLLECTOR_COLLECTOR_WEBSOCKET_ENABLED
-    )
-    log_module_status(
-        "Provider WebSocket Server",
-        config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED,
     )
     log_module_status("Handler", config.WEATHERFLOW_COLLECTOR_HANDLER_ENABLED)
 
