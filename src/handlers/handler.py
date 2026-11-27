@@ -1,8 +1,6 @@
 # handler.py
 
-import config
 import time
-import os
 import asyncio
 
 import logger

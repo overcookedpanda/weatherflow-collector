@@ -53,21 +53,13 @@ import config
 from utils.calculate_weather_metrics import CalculateWeatherMetrics
 
 
-import time
 from pytz import timezone
 import pytz
-from datetime import datetime, timedelta
-import json
-import inspect
-import os
-import asyncio
-import traceback
+from datetime import datetime
 
-import multiprocessing
 
 # from concurrent.futures import ThreadPoolExecutor
 
-from concurrent.futures import ProcessPoolExecutor
 
 
 import logger

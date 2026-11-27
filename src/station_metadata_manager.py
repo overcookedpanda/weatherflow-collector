@@ -49,16 +49,12 @@ It works in conjunction with other components of the system to manage weather st
 import config
 
 # from api_data_saver import APIDataSaver
-from datetime import datetime
 
 # from data_storage import DataStorage
 
-from logger import configure_logging
 import utils.utils as utils
 
 import configparser
-import json
-import logging
 import os
 import requests
 import threading

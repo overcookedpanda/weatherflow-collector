@@ -41,13 +41,8 @@ processing diverse data from meteorological sensors.
 """
 
 
-import json
-from datetime import datetime
 
 
-import asyncio
-import inspect
-import threading
 import copy
 
 import utils.utils as utils

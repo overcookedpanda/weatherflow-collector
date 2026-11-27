@@ -43,11 +43,8 @@ Created: [Creation Date]
 # calculate_weather_metrics.py
 
 import math
-import logging
-from datetime import datetime
 
 from logger import get_module_logger
-import utils.utils as utils
 
 logger = get_module_logger(__name__ + ".CalculateWeatherMetrics")
 

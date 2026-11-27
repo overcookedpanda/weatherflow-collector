@@ -49,7 +49,7 @@ streams.
 
 import config
 
-from influxdb_client import InfluxDBClient, Point, WriteOptions, DeleteService
+from influxdb_client import Point, WriteOptions
 from influxdb_client.client.influxdb_client_async import InfluxDBClientAsync
 
 
@@ -59,8 +59,7 @@ from influxdb_client.client.influxdb_client_async import InfluxDBClientAsync
 # Import necessary libraries for InfluxDB communication and others
 
 import time
-import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 import inspect
 import os

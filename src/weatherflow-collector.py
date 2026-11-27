@@ -45,7 +45,6 @@ Modifications may be required for use with other systems or data sources.
 
 import asyncio
 import config
-import threading
 import logger
 
 from collector.rest_forecasts import RestForcecastsCollector

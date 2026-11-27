@@ -54,20 +54,10 @@ from utils.calculate_weather_metrics import CalculateWeatherMetrics
 
 # Import necessary libraries for InfluxDB communication and others
 
-import time
-import pytz
-from datetime import datetime, timedelta
-import json
-import inspect
-import os
-import asyncio
-import traceback
 
-import multiprocessing
 
 # from concurrent.futures import ThreadPoolExecutor
 
-from concurrent.futures import ProcessPoolExecutor
 
 
 import logger
