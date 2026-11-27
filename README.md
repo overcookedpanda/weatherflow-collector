@@ -151,6 +151,9 @@ and wind speed and direction stats that read from this server through the
 [WebSocket API datasource](https://grafana.com/grafana/plugins/golioth-websocket-datasource/).
 They show no data until the server is enabled and the datasource is added, and
 they work only in a Grafana that can reach the collector, so not Grafana Cloud.
+Pick the WebSocket datasource and the device that reports rapid wind (your
+Tempest or SKY) at the top of the dashboard. Live wind speed is shown in m/s,
+as the station sends it. The external dashboard imports with only InfluxDB.
 
 ## Verify the image
 
