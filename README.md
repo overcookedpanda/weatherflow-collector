@@ -64,24 +64,22 @@ for HIGH and CRITICAL issues, signs it and verifies the signature. Only then
 do `latest` (from `main`) and the version tags (from `v*` tags) move to it,
 so a failed or interrupted release never leaves a tag on an unchecked image.
 
-Check a release yourself with cosign 3. This accepts only signatures made by
-this repo's release workflow on `main` or a version tag:
+Check a release yourself with cosign 3. Resolve the tag to a digest once,
+verify that digest, and deploy that same digest, so a tag that moves in
+between can't swap the image. The verify accepts only signatures made by this
+repo's release workflow on `main` or a version tag:
 
 ```sh
-cosign verify ghcr.io/overcookedpanda/weatherflow-collector:latest \
+IMAGE=ghcr.io/overcookedpanda/weatherflow-collector
+DIGEST=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{ .Manifest.Digest }}')
+cosign verify "$IMAGE@$DIGEST" \
   --certificate-identity-regexp '^https://github.com/overcookedpanda/weatherflow-collector/\.github/workflows/release\.yml@refs/(heads/main|tags/v.+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
+echo "$IMAGE@$DIGEST"
 ```
 
-For deployments, pin the digest that you verified instead of a tag:
-
-```sh
-docker buildx imagetools inspect ghcr.io/overcookedpanda/weatherflow-collector:latest \
-  --format '{{ .Manifest.Digest }}'
-```
-
-Then use `ghcr.io/overcookedpanda/weatherflow-collector@sha256:...` as the
-image in your compose file.
+Use the printed `image@sha256:...` reference as the image in your compose
+file.
 
 ## Development
 
