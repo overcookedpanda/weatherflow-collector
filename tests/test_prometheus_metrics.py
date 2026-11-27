@@ -336,3 +336,48 @@ def test_total_dropped_for_lack_of_room_leaves_no_dedup_entry():
     found = {name for (name, _labels) in series(store)}
     assert "weatherflow_obs_lightning_strike_count_total" not in found
     assert store._counted_reading == {}
+
+
+def test_future_dated_replay_does_not_enqueue_stale_gauges_or_advance_timestamp():
+    clock = Clock()
+    store = make_store(clock, queue_samples=True)
+    future = NOW + 301
+    observation = "weatherflow_obs"
+
+    store.add_point(
+        observation, {}, {"lightning_strike_count": 2, "air_temperature": 10}, future
+    )
+    store.drain()
+
+    clock.now = NOW + 2
+    store.add_point(
+        observation, {}, {"lightning_strike_count": 3, "air_temperature": 20}, clock.now
+    )
+    # The first reading is now within tolerance. A replay must leave every
+    # field alone, including the temperature and the exported freshness value.
+    store.add_point(
+        observation, {}, {"lightning_strike_count": 2, "air_temperature": 10}, future
+    )
+
+    published = {labels["__name__"]: samples for labels, samples in store.drain()}
+    ts_ms = int(clock.now * 1000)
+    assert published == {
+        "weatherflow_obs_air_temperature": [(20.0, ts_ms)],
+        "weatherflow_obs_lightning_strike_count": [(3.0, ts_ms)],
+        "weatherflow_obs_lightning_strike_count_total": [(5.0, ts_ms)],
+        "weatherflow_obs_observed_timestamp_seconds": [(clock.now, ts_ms)],
+    }
+
+
+def test_sample_age_limit_includes_exact_cutoff():
+    store = make_store(max_sample_age=60, queue_samples=True)
+    for field, age in (("at_cutoff", 60), ("too_old", 61)):
+        store.add_point("weatherflow_obs", {}, {field: 1}, NOW - age)
+
+    published = {labels["__name__"]: samples for labels, samples in store.drain()}
+    assert published == {
+        "weatherflow_obs_at_cutoff": [(1.0, int((NOW - 60) * 1000))],
+        "weatherflow_obs_observed_timestamp_seconds": [
+            (NOW - 60, int((NOW - 60) * 1000))
+        ],
+    }

@@ -3,6 +3,9 @@
 import asyncio
 import os
 import sys
+from unittest.mock import AsyncMock, MagicMock, Mock
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.dirname(__file__))
@@ -14,6 +17,7 @@ from aiohttp import web  # noqa: E402
 import config  # noqa: E402
 import config_validator  # noqa: E402
 from remote_write_decode import decode_write_request, snappy_decompress  # noqa: E402
+import storage.prometheus as prometheus_module  # noqa: E402
 from storage.prometheus import PrometheusStorage  # noqa: E402
 from storage.prometheus_metrics import MetricStore  # noqa: E402
 
@@ -352,3 +356,83 @@ def test_age_limits_are_checked_against_poll_intervals(monkeypatch):
     set_("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_FORECASTS_FETCH_INTERVAL", 1800)
     set_("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_OBSERVATIONS_INTERVAL", 900)
     assert len(config_validator.warn_prometheus_ages()) == 2
+
+
+@pytest.mark.parametrize(
+    "failure, resend_failed", [(429, True), (400, False), (TimeoutError(), True)],
+    ids=["rate-limited", "rejected", "transport-timeout"],
+)
+def test_partial_push_preserves_unsent_chunks(monkeypatch, failure, resend_failed):
+    monkeypatch.setattr(prometheus_module, "MAX_SERIES_PER_REQUEST", 1)
+    monkeypatch.setattr(
+        config, "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH", "none"
+    )
+    storage = PrometheusStorage(
+        FakeEventManager(), store=MetricStore(queue_samples=True, clock=lambda: 1000)
+    )
+    expected = [
+        ([("__name__", f"weatherflow_stats_{field}")], [(value, 1_000_000)])
+        for field, value in [("minimum", 10.0), ("mean", 20.0), ("maximum", 30.0)]
+    ]
+    storage.update({
+        "measurement": "weatherflow_stats",
+        "fields": {"minimum": 10, "mean": 20, "maximum": 30},
+    })
+
+    def response(status):
+        context = MagicMock()
+        context.__aenter__.return_value = Mock(
+            status=status, content=Mock(read=AsyncMock(return_value=b""))
+        )
+        return context
+
+    failed_post = response(failure) if isinstance(failure, int) else failure
+    pending = expected[1:] if resend_failed else expected[2:]
+    session = Mock()
+    session.post.side_effect = [response(204), failed_post] + [response(204) for _ in pending]
+
+    async def scenario():
+        url = "http://receiver.example/api/v1/write"
+        assert await storage.push_once(session, url=url) == 1
+        assert session.post.call_count == 2
+        assert await storage.push_once(session, url=url) == len(pending)
+        assert await storage.push_once(session, url=url) == 0
+
+    asyncio.run(scenario())
+
+    requests = [
+        decode_write_request(snappy_decompress(post.kwargs["data"]))
+        for post in session.post.call_args_list
+    ]
+    assert requests == [[item] for item in expected[:2] + pending]
+    assert storage.error_count == 1
+
+
+@pytest.mark.parametrize(
+    "username, password, interval, valid",
+    [
+        ("reader", "example", 1, True),
+        ("", "example", 1, False),
+        ("reader", "", 1, False),
+        ("reader", "example", 0, False),
+    ],
+    ids=["valid", "missing-username", "missing-password", "zero-interval"],
+)
+def test_basic_remote_write_config_requires_both_credentials_and_positive_interval(
+    monkeypatch, username, password, interval, valid
+):
+    prefix = "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_"
+    for key, value in {
+        "ENABLED": True,
+        "URL": "https://receiver.example/api/v1/write",
+        "AUTH": "basic",
+        "USERNAME": username,
+        "PASSWORD": password,
+        "INTERVAL": interval,
+    }.items():
+        monkeypatch.setattr(config, prefix + key, value)
+
+    assert config_validator.validate_prometheus_config() is valid
+    if valid:
+        authorization = make_storage().auth_headers("", {}, b"")["Authorization"]
+        assert aiohttp.BasicAuth.decode(authorization) == (username, password, "latin1")

@@ -4,6 +4,9 @@ import asyncio
 import json
 import os
 import sys
+from unittest.mock import AsyncMock
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 os.environ.setdefault("WEATHERFLOW_COLLECTOR_API_TOKEN", "test-token")
@@ -183,3 +186,66 @@ def test_browser_origins_are_refused_unless_listed(monkeypatch):
             server_task.cancel()
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "collector, changes",
+    [
+        ("collector_udp", {"serial_number": "unknown"}),
+        ("collector_websocket", {"device_id": None}),
+        ("collector_websocket", {"ob": [1700000000, 3.2]}),
+        ("collector_websocket", {"type": "obs_st"}),
+        ("collector_rest", {}),
+    ],
+    ids=["unknown-serial", "missing-device", "incomplete", "other-message", "other-source"],
+)
+def test_update_ignores_data_that_cannot_be_broadcast(monkeypatch, collector, changes):
+    provider = WebSocketServerProvider(FakeEventManager(), station_metadata=METADATA)
+    broadcast = AsyncMock()
+    monkeypatch.setattr(provider, "broadcast", broadcast)
+    event = rapid_wind(collector)
+    event["data"].update(changes)
+
+    async def scenario():
+        provider.update(event)
+        await asyncio.sleep(0)
+
+    asyncio.run(scenario())
+    broadcast.assert_not_called()
+
+
+def test_broadcast_continues_after_one_subscriber_send_fails():
+    class RecordingEventManager(FakeEventManager):
+        async def publish(self, event_type, data, publisher=None):
+            await super().publish(event_type, data, publisher)
+            published.set()
+
+    published = asyncio.Event()
+    events = RecordingEventManager()
+    provider = WebSocketServerProvider(events, station_metadata=METADATA)
+    collector = "collector_websocket"
+    healthy = AsyncMock()
+    failing = AsyncMock()
+    failing.send.side_effect = OSError("connection lost")
+    udp_client = AsyncMock()
+
+    async def scenario():
+        connections = (
+            (healthy, collector), (failing, collector), (udp_client, "collector_udp")
+        )
+        for connection, source in connections:
+            assert await provider.register(connection, f"/{source}/{DEVICE_ID}")
+        provider.update(rapid_wind(collector))
+        await asyncio.wait_for(published.wait(), timeout=1)
+
+    asyncio.run(scenario())
+
+    healthy.send.assert_awaited_once()
+    message = json.loads(healthy.send.await_args.args[0])
+    assert message["rapid_wind"][collector]["Test Station"]["wind_speed"] == 3.2
+    failing.send.assert_awaited_once()
+    udp_client.send.assert_not_called()
+    (event, metrics), = events.published
+    assert event == "system_metrics_event"
+    assert metrics["metric_name"] == "broadcast_collector_websocket"
+    assert (metrics["rate"], metrics["errors"], metrics["client_count"]) == (1, 1, 2)
