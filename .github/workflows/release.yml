@@ -1,5 +1,9 @@
 name: Release image
 
+# No tag ever points at an image that hasn't been scanned, signed and
+# verified. The image is pushed by digest only; the version and latest
+# tags are added last, to that same digest.
+
 on:
   push:
     branches: [main]
@@ -8,18 +12,32 @@ on:
 permissions:
   contents: read
 
+# Releases run one at a time and are never cancelled midway, so two runs
+# can't race to move the same tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
-    name: Build, attest, sign and push
+    name: Build, scan, sign, verify, then tag
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write # keyless signing through GitHub OIDC
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      # The signing identity cosign must see: this workflow, on this ref.
+      CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
+      CERT_ISSUER: https://token.actions.githubusercontent.com
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Log in to Docker Hardened Images
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -36,7 +54,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE }}
           # Only default-branch builds move latest, never a version tag.
           flavor: latest=false
           tags: |
@@ -44,21 +62,105 @@ jobs:
             type=sha
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+
+      # 1. Build both architectures once and push by digest, with no tags.
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           sbom: true
           provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
-      - name: Sign image
+
+      # 2. Scan that exact digest from the registry, for each architecture.
+      - name: Scan amd64
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_IMAGE_SRC: remote
+          TRIVY_PLATFORM: linux/amd64
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Scan arm64
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_IMAGE_SRC: remote
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # 3. Check the SBOM and provenance attestations are attached. They sit
+      #    in the image index, so the signature below covers them too.
+      - name: Check attestations
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-          IMAGE: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for platform in linux/amd64 linux/arm64; do
+            sbom=$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" \
+              --format "{{ json (index .SBOM \"${platform}\") }}")
+            prov=$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" \
+              --format "{{ json (index .Provenance \"${platform}\") }}")
+            if [ "$sbom" = "null" ] || [ "$prov" = "null" ]; then
+              echo "::error::Missing SBOM or provenance for ${platform}"
+              exit 1
+            fi
+          done
+
+      # 4. Sign the digest, then verify it against this workflow's identity.
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Sign
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
+      - name: Verify signature
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity "${CERT_IDENTITY}" \
+            --certificate-oidc-issuer "${CERT_ISSUER}" > /dev/null
+
+      # 5. Only now point the tags at the verified digest. A single index
+      #    source is copied as is, so each tag gets the same digest.
+      - name: Tag the verified digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && args+=(--tag "$tag")
+          done <<< "$TAGS"
+          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
+      - name: Confirm tags match the verified digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            got=$(docker buildx imagetools inspect "$tag" --format '{{ .Manifest.Digest }}')
+            if [ "$got" != "$DIGEST" ]; then
+              echo "::error::${tag} points at ${got}, not ${DIGEST}"
+              exit 1
+            fi
+          done <<< "$TAGS"
+          {
+            echo "### Released ${IMAGE}@${DIGEST}"
+            echo
+            echo '```'
+            echo "$TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

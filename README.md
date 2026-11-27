@@ -59,11 +59,29 @@ use InfluxQL against that bucket.
 
 ## Verify the image
 
+A release builds the image once, pushes it by digest, scans that digest
+for HIGH and CRITICAL issues, signs it and verifies the signature. Only then
+do `latest` (from `main`) and the version tags (from `v*` tags) move to it,
+so a failed or interrupted release never leaves a tag on an unchecked image.
+
+Check a release yourself with cosign 3. This accepts only signatures made by
+this repo's release workflow on `main` or a version tag:
+
 ```sh
 cosign verify ghcr.io/overcookedpanda/weatherflow-collector:latest \
-  --certificate-identity-regexp '^https://github.com/overcookedpanda/weatherflow-collector/' \
+  --certificate-identity-regexp '^https://github.com/overcookedpanda/weatherflow-collector/\.github/workflows/release\.yml@refs/(heads/main|tags/v.+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
+
+For deployments, pin the digest that you verified instead of a tag:
+
+```sh
+docker buildx imagetools inspect ghcr.io/overcookedpanda/weatherflow-collector:latest \
+  --format '{{ .Manifest.Digest }}'
+```
+
+Then use `ghcr.io/overcookedpanda/weatherflow-collector@sha256:...` as the
+image in your compose file.
 
 ## Development
 
