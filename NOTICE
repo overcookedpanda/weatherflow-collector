@@ -19,4 +19,5 @@ history. In summary:
   an unconditional import of a module that was not in the repository;
   updated dependencies for Python 3.13; rebuilt the container image as a
   hardened image on Docker Hardened Images; added tests, CI, signed releases, Dependabot
-  and secret scanning.
+  and secret scanning; added an opt-in Prometheus output and brought the
+  websocket server back as an opt-in provider bound to localhost.

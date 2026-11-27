@@ -145,6 +145,142 @@ WEATHERFLOW_COLLECTOR_STORAGE_INFLUXDB_TIMEOUT = int(
 )
 
 
+# Websocket server (off by default)
+#
+# Rebroadcasts live rapid wind readings to websocket clients. It has no
+# authentication, so it listens on 127.0.0.1 unless you choose a host. Only
+# bind it to a LAN address on a network you trust.
+
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED = (
+    os.getenv("WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED", "False").lower()
+    == "true"
+)
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_HOST = os.getenv(
+    "WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_HOST", "127.0.0.1"
+)
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PORT = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PORT", 6789)
+)
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_MAX_CONNECTIONS = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_MAX_CONNECTIONS", 100)
+)
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PING_INTERVAL = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PING_INTERVAL", 30)
+)
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PING_TIMEOUT = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PING_TIMEOUT", 10)
+)
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_CLEANUP_CONNECTIONS_INTERVAL = int(
+    os.getenv(
+        "WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_CLEANUP_CONNECTIONS_INTERVAL",
+        60,
+    )
+)
+# Browser origins allowed to connect, comma separated, such as
+# https://grafana.example.com. Clients that send no Origin header, such as
+# Grafana's server-side websocket datasource, are always allowed; browsers
+# always send one, so web pages are refused unless listed here.
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+
+# Prometheus output (off by default)
+#
+# Runs beside InfluxDB or on its own. Turn on the scrape endpoint, remote write,
+# or both. Credentials come from the environment; never commit them.
+
+
+def _env_bool(name, default):
+    return os.getenv(name, str(default)).strip().lower() == "true"
+
+
+def _env_list(name, default):
+    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_ENABLED = _env_bool(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_ENABLED", False
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_HOST = os.getenv(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_HOST", "127.0.0.1"
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_PORT = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_PORT", 9110)
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED = _env_bool(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED", False
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_URL = os.getenv(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_URL", ""
+)
+# none, sigv4 (Amazon Managed Service for Prometheus), basic or bearer
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH = (
+    os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH", "none")
+    .strip()
+    .lower()
+)
+# sigv4 reads AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN.
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_SIGV4_REGION = os.getenv(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_SIGV4_REGION",
+    os.getenv("AWS_REGION", ""),
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_USERNAME = os.getenv(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_USERNAME", ""
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_PASSWORD = os.getenv(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_PASSWORD", ""
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_BEARER_TOKEN = os.getenv(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_BEARER_TOKEN", ""
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_INTERVAL = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_INTERVAL", 30)
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_TIMEOUT = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_TIMEOUT", 30)
+)
+# Station coordinates and similar constant tags aren't useful as labels, and
+# leaving them out keeps your location off the scrape endpoint.
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_DROP_LABELS = _env_list(
+    "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_DROP_LABELS",
+    "station_latitude,station_longitude,station_elevation,station_time_zone",
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SERIES = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SERIES", 10000)
+)
+# The defaults follow the REST poll intervals (set further down), so a slower
+# poll never makes readings look too old or series expire between polls.
+_rest_observations_interval = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_OBSERVATIONS_INTERVAL", 60)
+)
+_rest_forecasts_interval = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_FORECASTS_FETCH_INTERVAL", 60)
+)
+# Series with no new reading for this many seconds are dropped. Keep it above
+# the forecasts fetch interval.
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_STALE_AFTER = int(
+    os.getenv(
+        "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_STALE_AFTER",
+        max(900, 2 * _rest_forecasts_interval, 2 * _rest_observations_interval),
+    )
+)
+# Observations older than this many seconds (a history import) are skipped.
+# Keep it above the REST observations interval.
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SAMPLE_AGE = int(
+    os.getenv(
+        "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SAMPLE_AGE",
+        max(600, 2 * _rest_observations_interval),
+    )
+)
+WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_ENABLED = (
+    WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_ENABLED
+    or WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED
+)
+
+
 # Event Manager Configuration
 
 WEATHERFLOW_COLLECTOR_EVENT_MANAGER_MAX_RETRIES = int(

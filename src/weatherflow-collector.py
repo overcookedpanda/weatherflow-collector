@@ -44,6 +44,7 @@ Modifications may be required for use with other systems or data sources.
 
 
 import asyncio
+import sys
 import config
 import logger
 
@@ -59,7 +60,9 @@ from processor.collector_data import CollectorDataProcessor
 from station_metadata_manager import StationMetadataManager
 from handlers.handler import Handler
 from storage.influxdb import InfluxDBStorage
+from storage.prometheus import PrometheusStorage
 from handlers.system_metrics import SystemMetricsHandler
+from provider.websocket_server import WebSocketServerProvider
 from config_validator import validate_all
 
 
@@ -102,6 +105,23 @@ async def setup_app():
         event_manager.subscribe("influxdb_storage_event", handler_influxdb)
     else:
         logger_main.info("handler_influxdb disabled.")
+
+    if config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_ENABLED:
+        logger_main.info("handler_prometheus enabled.")
+        handler_prometheus = PrometheusStorage(event_manager)
+        # Same events as InfluxDB, so both outputs can run at once.
+        event_manager.subscribe("influxdb_storage_event", handler_prometheus)
+        await handler_prometheus.start()
+    else:
+        logger_main.info("handler_prometheus disabled.")
+
+    if config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED:
+        logger_main.info("websocket_server_provider enabled.")
+        websocket_server_provider = WebSocketServerProvider(event_manager)
+        event_manager.subscribe("processed_data_event", websocket_server_provider)
+        asyncio.create_task(websocket_server_provider.start_server())
+    else:
+        logger_main.info("websocket_server_provider disabled.")
 
     if config.WEATHERFLOW_COLLECTOR_SYSTEM_METRICS_ENABLED:
         logger_main.info("system_metrics_event enabled.")
@@ -172,6 +192,7 @@ async def main_async():
             await asyncio.sleep(3600)  # Sleep for an hour; you can adjust this duration
     except Exception as e:
         logger_main.error(f"Application stopped due to error: {e}")
+        raise
 
 
 if __name__ == "__main__":
@@ -181,3 +202,4 @@ if __name__ == "__main__":
         logger_main.info("Stopping WeatherFlow Collector")
     except Exception as e:
         logger_main.error(f"Application terminated due to an error: {e}")
+        sys.exit(1)  # a non-zero exit lets the container restart policy act
