@@ -189,7 +189,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "velocitymph"
+                "value": "velocityms"
               }
             ]
           },
@@ -356,32 +356,32 @@
           },
           "fields": [
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_direction",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_direction",
               "language": "jsonpath",
               "name": "Wind Direction"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_speed",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_speed",
               "language": "jsonpath",
               "name": "Wind Speed"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].longitude",
+              "jsonPath": "$.rapid_wind['$source'].*.longitude",
               "language": "jsonpath",
               "name": "Longitude"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].latitude",
+              "jsonPath": "$.rapid_wind['$source'].*.latitude",
               "language": "jsonpath",
               "name": "Latitude"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].timestamp",
+              "jsonPath": "$.rapid_wind['$source'].*.timestamp",
               "language": "jsonpath",
               "name": "Time Stamp"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].station_name",
+              "jsonPath": "$.rapid_wind['$source'].*.station_name",
               "language": "jsonpath",
               "name": "Station Name"
             }
@@ -3468,7 +3468,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "velocitymph"
+                "value": "velocityms"
               },
               {
                 "id": "thresholds",
@@ -3565,13 +3565,13 @@
           },
           "fields": [
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].timestamp",
+              "jsonPath": "$.rapid_wind['$source'].*.timestamp",
               "language": "jsonpath",
               "name": "",
               "type": "time"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_speed",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_speed",
               "language": "jsonpath",
               "name": "",
               "type": "number"
@@ -3667,7 +3667,7 @@
             },
             {
               "options": {
-                "from": 77.5,
+                "from": 67.5,
                 "result": {
                   "index": 6,
                   "text": "←"
@@ -3683,7 +3683,7 @@
                   "index": 7,
                   "text": "↙"
                 },
-                "to": 77.5
+                "to": 67.5
               },
               "type": "range"
             },
@@ -3748,12 +3748,12 @@
           },
           "fields": [
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].timestamp",
+              "jsonPath": "$.rapid_wind['$source'].*.timestamp",
               "language": "jsonpath",
               "name": ""
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_direction",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_direction",
               "language": "jsonpath",
               "name": "",
               "type": "number"
@@ -5323,14 +5323,14 @@
           "type": "influxdb",
           "uid": "${data_source_influxdb}"
         },
-        "definition": "SHOW TAG VALUES WITH KEY = \"device_id\"  WHERE \"station_name\" =~ /^$station_name$/",
-        "hide": 2,
+        "definition": "SHOW TAG VALUES FROM \"weatherflow_rapid_wind\" WITH KEY = \"device_id\" WHERE \"station_name\" =~ /^$station_name$/",
+        "hide": 0,
         "includeAll": false,
         "label": "Device ID",
         "multi": false,
         "name": "device_id",
         "options": [],
-        "query": "SHOW TAG VALUES WITH KEY = \"device_id\"  WHERE \"station_name\" =~ /^$station_name$/",
+        "query": "SHOW TAG VALUES FROM \"weatherflow_rapid_wind\" WITH KEY = \"device_id\" WHERE \"station_name\" =~ /^$station_name$/",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

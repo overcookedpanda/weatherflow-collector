@@ -7,14 +7,6 @@
       "type": "datasource",
       "pluginId": "influxdb",
       "pluginName": "InfluxDB"
-    },
-    {
-      "name": "DS_WEBSOCKET_WEATHERFLOW_COLLECTOR",
-      "label": "WebSocket - weatherflow-collector",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "golioth-websocket-datasource",
-      "pluginName": "WebSocket API"
     }
   ],
   "__elements": {},
@@ -180,7 +172,7 @@
     {
       "datasource": {
         "type": "golioth-websocket-datasource",
-        "uid": "${DS_WEBSOCKET_WEATHERFLOW_COLLECTOR}"
+        "uid": "${data_source_websocket}"
       },
       "fieldConfig": {
         "defaults": {
@@ -252,7 +244,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "velocitymph"
+                "value": "velocityms"
               }
             ]
           },
@@ -415,36 +407,36 @@
         {
           "datasource": {
             "type": "golioth-websocket-datasource",
-            "uid": "${DS_WEBSOCKET_WEATHERFLOW_COLLECTOR}"
+            "uid": "${data_source_websocket}"
           },
           "fields": [
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_direction",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_direction",
               "language": "jsonpath",
               "name": "Wind Direction"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_speed",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_speed",
               "language": "jsonpath",
               "name": "Wind Speed"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].longitude",
+              "jsonPath": "$.rapid_wind['$source'].*.longitude",
               "language": "jsonpath",
               "name": "Longitude"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].latitude",
+              "jsonPath": "$.rapid_wind['$source'].*.latitude",
               "language": "jsonpath",
               "name": "Latitude"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].timestamp",
+              "jsonPath": "$.rapid_wind['$source'].*.timestamp",
               "language": "jsonpath",
               "name": "Time Stamp"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].station_name",
+              "jsonPath": "$.rapid_wind['$source'].*.station_name",
               "language": "jsonpath",
               "name": "Station Name"
             }
@@ -3099,7 +3091,7 @@
     {
       "datasource": {
         "type": "golioth-websocket-datasource",
-        "uid": "${DS_WEBSOCKET_WEATHERFLOW_COLLECTOR}"
+        "uid": "${data_source_websocket}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3531,7 +3523,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "velocitymph"
+                "value": "velocityms"
               },
               {
                 "id": "thresholds",
@@ -3624,17 +3616,17 @@
         {
           "datasource": {
             "type": "golioth-websocket-datasource",
-            "uid": "${DS_WEBSOCKET_WEATHERFLOW_COLLECTOR}"
+            "uid": "${data_source_websocket}"
           },
           "fields": [
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].timestamp",
+              "jsonPath": "$.rapid_wind['$source'].*.timestamp",
               "language": "jsonpath",
               "name": "",
               "type": "time"
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_speed",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_speed",
               "language": "jsonpath",
               "name": "",
               "type": "number"
@@ -3653,7 +3645,7 @@
     {
       "datasource": {
         "type": "golioth-websocket-datasource",
-        "uid": "${DS_WEBSOCKET_WEATHERFLOW_COLLECTOR}"
+        "uid": "${data_source_websocket}"
       },
       "description": "Live wind from the collector's websocket server. It is off by default: set WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED=true and add the WebSocket data source in grafana/datasources. Self-hosted Grafana only; Grafana Cloud can't reach your LAN.",
       "fieldConfig": {
@@ -3730,7 +3722,7 @@
             },
             {
               "options": {
-                "from": 77.5,
+                "from": 67.5,
                 "result": {
                   "index": 6,
                   "text": "←"
@@ -3746,7 +3738,7 @@
                   "index": 7,
                   "text": "↙"
                 },
-                "to": 77.5
+                "to": 67.5
               },
               "type": "range"
             },
@@ -3807,16 +3799,16 @@
         {
           "datasource": {
             "type": "golioth-websocket-datasource",
-            "uid": "${DS_WEBSOCKET_WEATHERFLOW_COLLECTOR}"
+            "uid": "${data_source_websocket}"
           },
           "fields": [
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].timestamp",
+              "jsonPath": "$.rapid_wind['$source'].*.timestamp",
               "language": "jsonpath",
               "name": ""
             },
             {
-              "jsonPath": "$.rapid_wind['$source']['$station_name'].wind_direction",
+              "jsonPath": "$.rapid_wind['$source'].*.wind_direction",
               "language": "jsonpath",
               "name": "",
               "type": "number"
@@ -5366,14 +5358,14 @@
           "type": "influxdb",
           "uid": "${DS_INFLUXDB_- INFLUXDB02 - TYLEPHONY - WEATHERFLOW}"
         },
-        "definition": "SHOW TAG VALUES WITH KEY = \"device_id\"  WHERE \"station_name\" =~ /^$station_name$/",
-        "hide": 2,
+        "definition": "SHOW TAG VALUES FROM \"weatherflow_rapid_wind\" WITH KEY = \"device_id\" WHERE \"station_name\" =~ /^$station_name$/",
+        "hide": 0,
         "includeAll": false,
         "label": "Device ID",
         "multi": false,
         "name": "device_id",
         "options": [],
-        "query": "SHOW TAG VALUES WITH KEY = \"device_id\"  WHERE \"station_name\" =~ /^$station_name$/",
+        "query": "SHOW TAG VALUES FROM \"weatherflow_rapid_wind\" WITH KEY = \"device_id\" WHERE \"station_name\" =~ /^$station_name$/",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
