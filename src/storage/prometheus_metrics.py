@@ -135,7 +135,7 @@ class MetricStore:
         self._warned_full = False
         self._warned_queue = False
         self._counter_names = set()
-        # total key -> latest future-dated reading time counted into it
+        # total key -> latest reading time counted into it
         self._counted_reading = {}
 
     # Input
@@ -170,7 +170,6 @@ class MetricStore:
         # A reading's own time, kept even when the sample time is corrected,
         # so a repeat of the same reading is never counted twice.
         reading_ts = ts
-        corrected = False  # True when a future-dated time was replaced by the clock
         labels = {
             label_name(k): str(v)
             for k, v in tags.items()
@@ -196,7 +195,6 @@ class MetricStore:
             sample_ts, order_ts = now, now
         else:
             if ts is None or ts > now + FUTURE_TOLERANCE_SECONDS:
-                corrected = ts is not None
                 ts = now
             if now - ts > self.max_sample_age:
                 return
@@ -229,19 +227,16 @@ class MetricStore:
                     is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
                     if field in counted and is_new:
                         total_key = (name + "_total", label_items)
-                        if corrected:
-                            # The clock replaced this reading's time, so _record
-                            # cannot spot a replay. Count it only when it is later
-                            # than the last future-dated reading counted, as
-                            # _record does for readings with a usable time. One
-                            # number per total keeps memory bounded.
-                            last = self._counted_reading.get(total_key)
-                            if last is not None and reading_ts <= last:
-                                continue
-                        if (
-                            self._add_to_total(total_key, value, sample_ts, order_ts, now)
-                            and corrected
-                        ):
+                        # Count a reading only when its own time is later than
+                        # the last one counted. _record compares sample times,
+                        # which the clock replaces for a future-dated reading,
+                        # so a replay could otherwise look new, including one
+                        # that falls back inside the tolerance later on. One
+                        # number per total keeps memory bounded.
+                        last = self._counted_reading.get(total_key)
+                        if last is not None and reading_ts <= last:
+                            continue
+                        if self._add_to_total(total_key, value, sample_ts, order_ts, now):
                             self._counted_reading[total_key] = reading_ts
 
     def _has_room(self):

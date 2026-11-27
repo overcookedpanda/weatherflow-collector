@@ -267,6 +267,19 @@ def test_future_dated_lightning_repeat_after_many_readings_is_counted_once():
     assert len(store._counted_reading) == 1  # one number per total, however many readings
 
 
+def test_lightning_repeat_that_falls_inside_the_tolerance_is_counted_once():
+    clock = Clock()
+    store = make_store(clock)
+    reading_ts = NOW + 301  # just past the tolerance at first, so it is corrected
+    for step in (0, 2):  # two seconds later the same reading is inside the tolerance
+        clock.now = NOW + step
+        store.add_point(
+            "weatherflow_obs", STATION_TAGS, {"lightning_strike_count": 2}, reading_ts
+        )
+    found = {name: value for (name, _labels), value in series(store).items()}
+    assert found["weatherflow_obs_lightning_strike_count_total"] == 2.0
+
+
 def test_total_dropped_for_lack_of_room_leaves_no_dedup_entry():
     store = make_store(max_series=2)
     store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": 2}, NOW - 60)
