@@ -1,5 +1,7 @@
 # weatherflow-collector
 
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/overcookedpanda/weatherflow-collector?utm_source=oss&utm_medium=github&utm_campaign=overcookedpanda%2Fweatherflow-collector&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 Collects data from a [WeatherFlow Tempest](https://tempest.earth) weather
 station (local UDP broadcast, the Tempest websocket and REST APIs, including
 forecasts) and stores it for Grafana dashboards: current conditions, rain and
