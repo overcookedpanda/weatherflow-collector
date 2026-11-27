@@ -4223,30 +4223,6 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "",
-          "value": ""
-        },
-        "datasource": {
-          "type": "influxdb",
-          "uid": "${data_source_influxdb}"
-        },
-        "definition": "SHOW TAG VALUES WITH KEY = \"device_id\"  WHERE \"station_name\" =~ /^$station_name$/",
-        "hide": 2,
-        "includeAll": false,
-        "label": "Device ID",
-        "multi": false,
-        "name": "device_id",
-        "options": [],
-        "query": "SHOW TAG VALUES WITH KEY = \"device_id\"  WHERE \"station_name\" =~ /^$station_name$/",
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
       }
     ]
   },
