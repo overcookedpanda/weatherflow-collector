@@ -5,6 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+import storage.prometheus_metrics as metrics_module  # noqa: E402
 from storage.prometheus_metrics import (  # noqa: E402
     OBSERVED_TIMESTAMP_SUFFIX,
     MetricStore,
@@ -278,6 +279,38 @@ def test_lightning_repeat_that_falls_inside_the_tolerance_is_counted_once():
         )
     found = {name: value for (name, _labels), value in series(store).items()}
     assert found["weatherflow_obs_lightning_strike_count_total"] == 2.0
+
+
+def test_reading_after_a_future_dated_one_still_counts():
+    clock = Clock()
+    store = make_store(clock)
+    clock.now = NOW
+    store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": 2}, NOW + 3600)
+    clock.now = NOW + 60
+    store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": 3}, NOW + 60)
+    found = {name: value for (name, _labels), value in series(store).items()}
+    assert found["weatherflow_obs_lightning_strike_count_total"] == 5.0
+
+
+def test_remembered_future_readings_stay_bounded():
+    original = metrics_module.FUTURE_READINGS_KEPT
+    metrics_module.FUTURE_READINGS_KEPT = 4
+    try:
+        clock = Clock()
+        store = make_store(clock)
+        for step in range(10):
+            clock.now = NOW + step
+            store.add_point(
+                "weatherflow_obs",
+                STATION_TAGS,
+                {"lightning_strike_count": 1},
+                NOW + 3600 + step,
+            )
+    finally:
+        metrics_module.FUTURE_READINGS_KEPT = original
+    (seen,) = store._counted_reading.values()
+    assert len(seen) == 4
+    assert min(seen) == NOW + 3606  # the oldest were let go first
 
 
 def test_total_dropped_for_lack_of_room_leaves_no_dedup_entry():

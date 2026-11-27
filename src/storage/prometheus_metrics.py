@@ -48,6 +48,9 @@ OBSERVED_TIMESTAMP_SUFFIX = "observed_timestamp_seconds"
 
 # Readings stamped this far in the future are treated as clock skew.
 FUTURE_TOLERANCE_SECONDS = 300
+# Most future-dated reading times remembered per running total, so a replay of
+# one is not counted again. Older entries expire with max_sample_age first.
+FUTURE_READINGS_KEPT = 1024
 
 _INVALID_NAME = re.compile(r"[^a-zA-Z0-9_:]")
 _INVALID_LABEL = re.compile(r"[^a-zA-Z0-9_]")
@@ -134,8 +137,9 @@ class MetricStore:
         self._last_sent = {}  # key -> timestamp_ms
         self._warned_full = False
         self._warned_queue = False
+        self._warned_future = False
         self._counter_names = set()
-        # total key -> latest reading time counted into it
+        # total key -> set of future-dated reading times counted into it
         self._counted_reading = {}
 
     # Input
@@ -170,6 +174,7 @@ class MetricStore:
         # A reading's own time, kept even when the sample time is corrected,
         # so a repeat of the same reading is never counted twice.
         reading_ts = ts
+        corrected = False  # True when a future-dated time was replaced by the clock
         labels = {
             label_name(k): str(v)
             for k, v in tags.items()
@@ -195,6 +200,7 @@ class MetricStore:
             sample_ts, order_ts = now, now
         else:
             if ts is None or ts > now + FUTURE_TOLERANCE_SECONDS:
+                corrected = ts is not None
                 ts = now
             if now - ts > self.max_sample_age:
                 return
@@ -227,17 +233,36 @@ class MetricStore:
                     is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
                     if field in counted and is_new:
                         total_key = (name + "_total", label_items)
-                        # Count a reading only when its own time is later than
-                        # the last one counted. _record compares sample times,
-                        # which the clock replaces for a future-dated reading,
-                        # so a replay could otherwise look new, including one
-                        # that falls back inside the tolerance later on. One
-                        # number per total keeps memory bounded.
-                        last = self._counted_reading.get(total_key)
-                        if last is not None and reading_ts <= last:
+                        # _record compares sample times, which the clock
+                        # replaces for a future-dated reading, so a replay of
+                        # one could look new, including one that falls back
+                        # inside the tolerance later on. Remember the
+                        # future-dated readings counted and skip those.
+                        seen = self._counted_reading.get(total_key)
+                        if seen and reading_ts in seen:
                             continue
-                        if self._add_to_total(total_key, value, sample_ts, order_ts, now):
-                            self._counted_reading[total_key] = reading_ts
+                        if (
+                            self._add_to_total(total_key, value, sample_ts, order_ts, now)
+                            and corrected
+                        ):
+                            self._remember_future_reading(total_key, reading_ts, now)
+
+    def _remember_future_reading(self, total_key, reading_ts, now):
+        seen = self._counted_reading.setdefault(total_key, set())
+        seen.add(reading_ts)
+        if len(seen) <= FUTURE_READINGS_KEPT:
+            return
+        # A repeat older than max_sample_age is dropped before it is counted.
+        cutoff = now - self.max_sample_age
+        seen.difference_update({t for t in seen if t < cutoff})
+        while len(seen) > FUTURE_READINGS_KEPT:
+            seen.discard(min(seen))
+            if not self._warned_future and self.logger:
+                self.logger.warning(
+                    "Prometheus output is seeing many future-dated readings; "
+                    "check the station's clock"
+                )
+                self._warned_future = True
 
     def _has_room(self):
         if len(self._latest) < self.max_series:
