@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!docs/UPSTREAM_README.md"
+    - "!**/__pycache__/**"
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        This is a public repository. Flag any personal or secret data being
+        added: API tokens, passwords, WeatherFlow station, device, hub or
+        serial numbers, latitude and longitude, elevation, station names,
+        IP addresses, hostnames or email addresses. Placeholders like
+        <YOUR_TEMPEST_TOKEN> and the value test-token are fine.
+    - path: "src/**/*.py"
+      instructions: >-
+        Python 3.13 asyncio collector for WeatherFlow Tempest data. Look for
+        blocking calls inside async code, unhandled network errors and
+        reconnects, unbounded queues or memory growth, wrong units or
+        conversions, and log lines that could print tokens. Keep changes
+        small and consistent with the existing module layout.
+    - path: "tests/**/*.py"
+      instructions: >-
+        Tests must not hit the network or use real station data. Recorded
+        sample messages must use fake serials, IDs and coordinates.
+    - path: "Dockerfile"
+      instructions: >-
+        Hardened image: Docker Hardened Images Python, multi-stage, runtime
+        with no shell or package manager, nonroot UID 65532, read-only root
+        filesystem at run time. Build and runtime stages must stay on the
+        same Python tag, because the venv links to the interpreter. Flag
+        anything that adds a shell, runs as root at runtime, or unpins a base.
+    - path: ".github/workflows/**"
+      instructions: >-
+        Check least-privilege permissions, that secrets are never echoed or
+        passed to steps that don't need them, that pull_request_target is not
+        used with untrusted checkout, and that third-party actions are from
+        trusted publishers.
+    - path: "grafana/**/*.json"
+      instructions: >-
+        Dashboards must use templated data source and station variables with
+        no default values, and no hard-coded station or device IDs or data
+        source UIDs. Skip style comments on generated panel JSON.
+  tools:
+    ruff:
+      enabled: true
+    hadolint:
+      enabled: true
+    actionlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+chat:
+  auto_reply: true
