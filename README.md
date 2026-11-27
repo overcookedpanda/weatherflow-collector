@@ -17,9 +17,10 @@ documentation, which still describes most settings.
 
 ## What's different here
 
-- **Hardened image:** multi-stage build on distroless Python 3.13, nonroot,
-  runs with a read-only root filesystem and no capabilities. Bases pinned by
-  digest.
+- **Hardened image:** multi-stage build on
+  [Docker Hardened Images](https://docs.docker.com/dhi/) Python 3.13, with no
+  shell or package manager at runtime, nonroot, and run with a read-only root
+  filesystem and no capabilities.
 - **Signed releases:** images on GHCR with SBOM and provenance attestations,
   signed keyless with cosign.
 - **Smaller surface:** the export processor, file storage, public websocket
@@ -63,6 +64,10 @@ cosign verify ghcr.io/overcookedpanda/weatherflow-collector:latest \
 ```
 
 ## Development
+
+Building the image yourself needs a free Docker Hub account and
+`docker login dhi.io`, because the base images come from Docker Hardened
+Images. The published image on GHCR needs no login.
 
 ```sh
 python3 -m venv .venv && . .venv/bin/activate
