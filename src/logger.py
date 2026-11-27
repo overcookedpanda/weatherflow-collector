@@ -120,6 +120,7 @@ class CustomFormatter(logging.Formatter):
         "processor": "dark_cyan",
         "processor.collector_data.CollectorDataProcessor": "dark_cyan",
         "provider": "blue",
+        "provider.websocket_server.WebSocketServerProvider": "blue",
         "station_metadata_manager": "magenta",
         "storage": "dark_magenta",
         "storage.influxdb.InfluxDBStorage": "dark_magenta",

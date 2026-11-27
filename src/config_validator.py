@@ -105,6 +105,10 @@ def validate_module_enablement():
     log_module_status(
         "Collector WebSocket", config.WEATHERFLOW_COLLECTOR_COLLECTOR_WEBSOCKET_ENABLED
     )
+    log_module_status(
+        "Provider WebSocket Server",
+        config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED,
+    )
     log_module_status("Handler", config.WEATHERFLOW_COLLECTOR_HANDLER_ENABLED)
 
     return True

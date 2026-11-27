@@ -60,6 +60,7 @@ from station_metadata_manager import StationMetadataManager
 from handlers.handler import Handler
 from storage.influxdb import InfluxDBStorage
 from handlers.system_metrics import SystemMetricsHandler
+from provider.websocket_server import WebSocketServerProvider
 from config_validator import validate_all
 
 
@@ -102,6 +103,14 @@ async def setup_app():
         event_manager.subscribe("influxdb_storage_event", handler_influxdb)
     else:
         logger_main.info("handler_influxdb disabled.")
+
+    if config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED:
+        logger_main.info("websocket_server_provider enabled.")
+        websocket_server_provider = WebSocketServerProvider(event_manager)
+        event_manager.subscribe("processed_data_event", websocket_server_provider)
+        asyncio.create_task(websocket_server_provider.start_server())
+    else:
+        logger_main.info("websocket_server_provider disabled.")
 
     if config.WEATHERFLOW_COLLECTOR_SYSTEM_METRICS_ENABLED:
         logger_main.info("system_metrics_event enabled.")
