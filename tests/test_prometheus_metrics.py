@@ -229,3 +229,14 @@ def test_lightning_total_grows_once_per_reading():
     assert found["weatherflow_obs_lightning_strike_count_total"] == 5.0
     assert found["weatherflow_obs_lightning_strike_count"] == 3.0
     assert "# TYPE weatherflow_obs_lightning_strike_count_total counter" in store.exposition()
+
+
+def test_future_dated_lightning_repeat_is_counted_once():
+    clock = Clock()
+    store = make_store(clock)
+    future = NOW + 3600  # past the tolerance, so the sample time is corrected
+    for step, (ts, strikes) in enumerate(((future, 2), (future, 2), (future + 60, 3))):
+        clock.now = NOW + step
+        store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": strikes}, ts)
+    found = {name: value for (name, _labels), value in series(store).items()}
+    assert found["weatherflow_obs_lightning_strike_count_total"] == 5.0

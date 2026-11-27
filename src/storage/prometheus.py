@@ -148,7 +148,8 @@ class PrometheusStorage:
                     if 200 <= response.status < 300:
                         sent += len(chunk)
                         continue
-                    detail = (await response.read())[:200].decode("utf-8", "replace")
+                    # Read only a short prefix, so a huge error page is never buffered.
+                    detail = (await response.content.read(200)).decode("utf-8", "replace")
                     retry = response.status in RETRYABLE_STATUSES or response.status >= 500
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 detail, retry = str(e), True

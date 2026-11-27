@@ -135,6 +135,8 @@ class MetricStore:
         self._warned_full = False
         self._warned_queue = False
         self._counter_names = set()
+        # total key -> timestamp of the last reading counted into it
+        self._counted_reading = {}
 
     # Input
 
@@ -165,6 +167,9 @@ class MetricStore:
             return
         now = self.clock()
         ts = epoch_seconds(timestamp)
+        # A reading's own time, kept even when the sample time is corrected,
+        # so a repeat of the same reading is never counted twice.
+        reading_ts = ts
         labels = {
             label_name(k): str(v)
             for k, v in tags.items()
@@ -194,6 +199,8 @@ class MetricStore:
             if now - ts > self.max_sample_age:
                 return
             sample_ts, order_ts = ts, ts
+        if reading_ts is None:
+            reading_ts = sample_ts
 
         label_sets = [labels]
         if self.primary_source and labels.get("collector_type") == self.primary_source:
@@ -219,9 +226,10 @@ class MetricStore:
                     name = metric_name(measurement, field)
                     is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
                     if field in counted and is_new:
-                        self._add_to_total(
-                            (name + "_total", label_items), value, sample_ts, order_ts, now
-                        )
+                        total_key = (name + "_total", label_items)
+                        if self._counted_reading.get(total_key) != reading_ts:
+                            self._counted_reading[total_key] = reading_ts
+                            self._add_to_total(total_key, value, sample_ts, order_ts, now)
 
     def _has_room(self):
         if len(self._latest) < self.max_series:
@@ -276,6 +284,7 @@ class MetricStore:
             for key in [k for k, v in self._latest.items() if v[2] < cutoff]:
                 del self._latest[key]
                 self._last_sent.pop(key, None)
+                self._counted_reading.pop(key, None)
 
     def series_count(self):
         with self._lock:
