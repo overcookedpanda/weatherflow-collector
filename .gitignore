@@ -1,0 +1,15 @@
+# Local configuration with real values: never commit
+.env
+compose.yaml
+docker-compose.yaml
+conf/
+src/conf/
+logs/
+src/logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
