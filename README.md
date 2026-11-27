@@ -134,6 +134,12 @@ lets anyone on that network read the live feed, so do that only on a network
 you trust. A sample datasource is in `grafana/datasources`; replace its
 placeholder host.
 
+The InfluxDB overview dashboards (internal and external) have a live wind map
+and wind speed and direction stats that read from this server through the
+[WebSocket API datasource](https://grafana.com/grafana/plugins/golioth-websocket-datasource/).
+They show no data until the server is enabled and the datasource is added, and
+they work only in a Grafana that can reach the collector, so not Grafana Cloud.
+
 ## Verify the image
 
 A release builds the image once, pushes it by digest, scans that digest
