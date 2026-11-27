@@ -17,6 +17,8 @@ from remote_write_decode import decode_write_request, snappy_decompress  # noqa:
 from storage.prometheus import PrometheusStorage  # noqa: E402
 from storage.prometheus_metrics import MetricStore  # noqa: E402
 
+TEMPERATURE = "weatherflow_obs_air_temperature"
+
 
 class FakeEventManager:
     is_metric_event_processing = False
@@ -76,16 +78,22 @@ def test_scrape_endpoint_serves_metrics():
     asyncio.run(scenario())
 
 
-async def _receiver(statuses):
-    """Start a fake remote write receiver; returns (runner, url, received)."""
+async def _receiver(statuses, body=b"", headers=None):
+    """Start a fake remote write receiver on loopback; returns (runner, url, received)."""
     received = []
 
     async def handle(request):
         received.append((dict(request.headers), await request.read()))
-        return web.Response(status=statuses.pop(0) if statuses else 204)
+        status = statuses.pop(0) if statuses else 204
+        return web.Response(status=status, body=body if status >= 300 else b"", headers=headers)
+
+    async def elsewhere(request):
+        received.append(("redirect target", await request.read()))
+        return web.Response(status=204)
 
     app = web.Application()
     app.router.add_post("/api/v1/write", handle)
+    app.router.add_post("/elsewhere", elsewhere)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -113,7 +121,8 @@ def test_remote_write_sends_a_valid_payload(monkeypatch):
         runner, url, received = await _receiver([])
         try:
             async with aiohttp.ClientSession() as session:
-                assert await storage.push_once(session, url=url) == 1
+                # The reading and its observed-timestamp series.
+                assert await storage.push_once(session, url=url) == 2
         finally:
             await runner.cleanup()
         headers, body = received[0]
@@ -121,9 +130,14 @@ def test_remote_write_sends_a_valid_payload(monkeypatch):
         assert headers["Content-Type"] == "application/x-protobuf"
         assert headers["X-Prometheus-Remote-Write-Version"] == "0.1.0"
         assert headers["Authorization"] == "Bearer example-token"
-        (labels, samples), = decode_write_request(snappy_decompress(body))
-        assert ("__name__", "weatherflow_obs_air_temperature") in labels
-        assert samples == [(21.5, int(now * 1000))]
+        decoded = {
+            dict(labels)["__name__"]: samples
+            for labels, samples in decode_write_request(snappy_decompress(body))
+        }
+        assert decoded[TEMPERATURE] == [(21.5, int(now * 1000))]
+        assert decoded["weatherflow_obs_observed_timestamp_seconds"] == [
+            (now, int(now * 1000))
+        ]
 
     asyncio.run(scenario())
 
@@ -142,7 +156,7 @@ def test_remote_write_retries_server_errors_and_drops_rejections(monkeypatch):
         try:
             async with aiohttp.ClientSession() as session:
                 assert await storage.push_once(session, url=url) == 0  # 503, kept
-                assert await storage.push_once(session, url=url) == 1  # retried
+                assert await storage.push_once(session, url=url) == 2  # retried
                 assert await storage.push_once(session, url=url) == 0  # nothing left
         finally:
             await runner.cleanup()
@@ -221,3 +235,120 @@ def test_influxdb_settings_not_required_when_influxdb_is_off(monkeypatch):
         config, "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED", False
     )
     assert config_validator.validate_all() is True
+
+
+def test_remote_write_does_not_follow_redirects(monkeypatch):
+    monkeypatch.setattr(
+        config, "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH", "none"
+    )
+
+    async def scenario():
+        import time
+
+        storage = make_storage(queue_samples=True)
+        storage.update(reading(time.time()))
+        runner, url, received = await _receiver([307], headers={"Location": "/elsewhere"})
+        try:
+            async with aiohttp.ClientSession() as session:
+                assert await storage.push_once(session, url=url) == 0
+        finally:
+            await runner.cleanup()
+        assert [entry[0] for entry in received if entry[0] == "redirect target"] == []
+        assert len(received) == 1
+
+    asyncio.run(scenario())
+
+
+def test_undecodable_error_body_still_retries(monkeypatch):
+    monkeypatch.setattr(
+        config, "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH", "none"
+    )
+
+    async def scenario():
+        import time
+
+        storage = make_storage(queue_samples=True)
+        storage.update(reading(time.time()))
+        runner, url, received = await _receiver(
+            [503, 204], body=b"\xff\xfe not utf-8", headers={"Content-Type": "text/plain; charset=utf-8"}
+        )
+        try:
+            async with aiohttp.ClientSession() as session:
+                assert await storage.push_once(session, url=url) == 0
+                assert await storage.push_once(session, url=url) == 2
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(scenario())
+
+
+def test_close_stops_the_remote_write_loop(monkeypatch):
+    monkeypatch.setattr(config, "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_INTERVAL", 3600)
+
+    async def scenario():
+        storage = make_storage(queue_samples=True)
+        storage.scrape_enabled = False
+        storage.remote_write_enabled = True
+        await storage.start()
+        task = storage.remote_write_task
+        assert task is not None and not task.done()
+        await storage.close()
+        assert task.cancelled()
+
+    asyncio.run(scenario())
+
+
+def test_scrape_bind_failure_stops_startup_when_it_is_the_only_output(monkeypatch):
+    monkeypatch.setattr(config, "WEATHERFLOW_COLLECTOR_STORAGE_INFLUXDB_ENABLED", False)
+
+    async def scenario():
+        blocker = make_storage()
+        site = await blocker.start_scrape_endpoint(host="127.0.0.1", port=0)
+        port = site._server.sockets[0].getsockname()[1]
+        storage = make_storage()
+        storage.scrape_enabled = True
+        storage.remote_write_enabled = False
+        monkeypatch.setattr(config, "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_HOST", "127.0.0.1")
+        monkeypatch.setattr(config, "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_PORT", port)
+        try:
+            raised = False
+            try:
+                await storage.start()
+            except OSError:
+                raised = True
+            assert raised
+            monkeypatch.setattr(config, "WEATHERFLOW_COLLECTOR_STORAGE_INFLUXDB_ENABLED", True)
+            await storage.start()  # InfluxDB still runs, so carry on
+        finally:
+            await storage.close()
+            await blocker.close()
+
+    asyncio.run(scenario())
+
+
+def test_validator_rejects_credentials_in_the_url(monkeypatch):
+    set_ = lambda name, value: monkeypatch.setattr(config, name, value)  # noqa: E731
+    set_("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED", True)
+    set_("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH", "none")
+    set_(
+        "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_URL",
+        "http://user:example-secret@example.com/api/v1/write",
+    )
+    assert config_validator.validate_prometheus_config() is False
+    set_(
+        "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_URL",
+        "http://receiver.example:9009/api/v1/push",
+    )
+    assert config_validator.validate_prometheus_config() is True
+
+
+def test_age_limits_are_checked_against_poll_intervals(monkeypatch):
+    set_ = lambda name, value: monkeypatch.setattr(config, name, value)  # noqa: E731
+    set_("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_OBSERVATIONS_INTERVAL", 60)
+    set_("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_FORECASTS_FETCH_INTERVAL", 60)
+    set_("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SAMPLE_AGE", 600)
+    set_("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_STALE_AFTER", 900)
+    assert config_validator.warn_prometheus_ages() == []
+    set_("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_FORECASTS_FETCH_INTERVAL", 1800)
+    set_("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_OBSERVATIONS_INTERVAL", 900)
+    assert len(config_validator.warn_prometheus_ages()) == 2

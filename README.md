@@ -103,14 +103,17 @@ with the station, device and collector type. Hourly and daily forecasts get an
 coordinates, elevation and time zone are left out of the labels; change that
 with `WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_DROP_LABELS`. History imported
 with the REST import collector is not sent, since Prometheus stores rarely
-accept old samples. Other settings, with defaults:
+accept old samples. Each observation type also gets
+`<measurement>_observed_timestamp_seconds`, the time of its latest reading, and
+lightning strikes get a running total, `weatherflow_obs_lightning_strike_count_total`,
+to use with `increase()`. Other settings, with defaults:
 
 | Setting (prefix `WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_`) | Default |
 | --- | --- |
 | `REMOTE_WRITE_INTERVAL` (seconds) | 30 |
 | `REMOTE_WRITE_TIMEOUT` (seconds) | 30 |
-| `STALE_AFTER` (seconds without a reading before a series is dropped) | 900 |
-| `MAX_SAMPLE_AGE` (seconds; older observations are skipped) | 600 |
+| `STALE_AFTER` (seconds without a reading before a series is dropped; keep it above the REST poll intervals) | 900, or twice the longest REST poll interval if that is more |
+| `MAX_SAMPLE_AGE` (seconds; older observations are skipped; keep it above the REST observations interval) | 600, or twice the REST observations interval if that is more |
 | `MAX_SERIES` | 10000 |
 
 Prometheus versions of the dashboards are in `grafana/dashboards/prometheus`: current conditions, forecast, and collector health. Import them into Grafana and pick your Prometheus data source when asked. They are built by `scripts/build_prometheus_dashboards.py`; edit that script and rerun it rather than editing the JSON, and a test checks the two match. Values are in the units the Tempest reports (Celsius, m/s, mb, mm), so change a panel's unit in Grafana if you prefer others.
@@ -133,6 +136,15 @@ localhost. With host networking, setting the host to `0.0.0.0` or a LAN address
 lets anyone on that network read the live feed, so do that only on a network
 you trust. A sample datasource is in `grafana/datasources`; replace its
 placeholder host.
+
+Clients that send no `Origin` header, such as Grafana's WebSocket API
+datasource, which connects from the Grafana server, can always connect.
+Browsers always send one, so web pages are refused unless their origin is
+listed, which stops another site open in your browser from reading the feed:
+
+```sh
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ORIGINS=https://grafana.example.com
+```
 
 The InfluxDB overview dashboards (internal and external) have a live wind map
 and wind speed and direction stats that read from this server through the

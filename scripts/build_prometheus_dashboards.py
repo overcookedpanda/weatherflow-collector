@@ -160,9 +160,14 @@ def timeseries(title, targets, unit, description="", draw="line", stack=False):
 
 
 def forecast_table(title, columns, key, description=""):
-    """An instant table merging one query per column, joined on key."""
+    """An instant table merging one query per column, joined on key.
+
+    Each query is aggregated to the same labels (station and horizon) so the
+    rows share every field but the value, which the merge needs; the raw
+    series would differ on __name__ and never merge.
+    """
     targets = [
-        target(expr, ref=chr(ord("A") + i), instant=True, fmt="table")
+        target(f"max by (station_name, {key}) ({expr})", ref=chr(ord("A") + i), instant=True, fmt="table")
         for i, (expr, _name, _unit) in enumerate(columns)
     ]
     renames = {f"Value #{chr(ord('A') + i)}": name for i, (_e, name, _u) in enumerate(columns)}
@@ -181,7 +186,7 @@ def forecast_table(title, columns, key, description=""):
             {
                 "id": "organize",
                 "options": {
-                    "excludeByName": {"Time": True, "__name__": True, "collector_type": True, "station_id": True},
+                    "excludeByName": {"Time": True},
                     "renameByName": {**renames, key: "Ahead"},
                     "indexByName": {key: 0},
                 },
@@ -247,7 +252,7 @@ def current_conditions():
         layout.place(
             stat(
                 "Lightning strikes, last hour",
-                f"sum by (station_name) (sum_over_time(weatherflow_obs_lightning_strike_count{{{SEL}}}[1h]))",
+                f"sum by (station_name) (increase(weatherflow_obs_lightning_strike_count_total{{{SEL}}}[1h]))",
                 "none",
                 0,
             ),
@@ -408,10 +413,11 @@ def collector_health():
         layout.place(
             stat(
                 "Seconds since last observation",
-                f"time() - max by (station_name) (timestamp(weatherflow_obs_air_temperature{{{SEL}}}))",
+                f"time() - max by (station_name) (weatherflow_obs_observed_timestamp_seconds{{{SEL}}})",
                 "s",
                 0,
-                "From the latest sample Prometheus holds for the selected source.",
+                "Age of the station's latest reading, which keeps growing if the "
+                "station stops reporting even while Prometheus keeps scraping.",
             ),
             8,
             4,
@@ -419,7 +425,7 @@ def collector_health():
         layout.place(
             stat(
                 "Seconds since last rapid wind",
-                f"time() - max by (station_name) (timestamp(weatherflow_rapid_wind_wind_speed{{{SEL}}}))",
+                f"time() - max by (station_name) (weatherflow_rapid_wind_observed_timestamp_seconds{{{SEL}}})",
                 "s",
                 0,
             ),
@@ -477,7 +483,7 @@ def main():
         ("weatherflow-collector_health", collector_health),
     ):
         path = OUT / f"{name}.json"
-        path.write_text(json.dumps(build(), indent=2, ensure_ascii=False) + "\n")
+        path.write_text(json.dumps(build(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"wrote {path.relative_to(OUT.parent.parent.parent)}")
 
 

@@ -25,7 +25,7 @@ def websocket_panels(dashboard):
 
 def test_live_wind_panels_are_back_and_match_the_server():
     for path in DASHBOARDS:
-        dashboard = json.loads(path.read_text())
+        dashboard = json.loads(path.read_text(encoding="utf-8"))
         panels = websocket_panels(dashboard)
         assert len(panels) == 3, path
         for panel in panels:
@@ -43,5 +43,5 @@ def test_live_wind_panels_are_back_and_match_the_server():
 
 def test_no_original_author_hosts():
     for path in DASHBOARDS:
-        text = path.read_text().lower()
+        text = path.read_text(encoding="utf-8").lower()
         assert "app20" not in text

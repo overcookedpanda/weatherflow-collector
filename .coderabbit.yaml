@@ -37,7 +37,8 @@ reviews:
         small and consistent with the existing module layout.
     - path: "tests/**/*.py"
       instructions: >-
-        Tests must not hit the network or use real station data. Recorded
+        Tests must not reach external hosts or use real station data. Servers
+        started by the test itself on 127.0.0.1 with port 0 are fine. Recorded
         sample messages must use fake serials, IDs and coordinates.
     - path: "Dockerfile"
       instructions: >-

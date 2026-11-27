@@ -1,6 +1,7 @@
 # config_validator.py
 
 import os
+from urllib.parse import urlsplit
 
 import config
 import logger
@@ -127,8 +128,32 @@ def validate_module_enablement():
 REMOTE_WRITE_AUTH_MODES = ("none", "sigv4", "basic", "bearer")
 
 
+def warn_prometheus_ages():
+    """Warn when an age limit is shorter than the poll interval it must cover."""
+    max_age = config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SAMPLE_AGE
+    stale = config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_STALE_AFTER
+    observations = config.WEATHERFLOW_COLLECTOR_COLLECTOR_REST_OBSERVATIONS_INTERVAL
+    forecasts = config.WEATHERFLOW_COLLECTOR_COLLECTOR_REST_FORECASTS_FETCH_INTERVAL
+    warnings = []
+    if max_age <= observations:
+        warnings.append(
+            f"MAX_SAMPLE_AGE ({max_age}s) is not above the REST observations interval "
+            f"({observations}s), so REST observations may be skipped"
+        )
+    if stale <= max(observations, forecasts):
+        warnings.append(
+            f"STALE_AFTER ({stale}s) is not above the REST poll intervals, so series "
+            "may expire between polls"
+        )
+    for warning in warnings:
+        logger_ConfigValidator.warning(f"Prometheus output: {warning}.")
+    return warnings
+
+
 def validate_prometheus_config():
     """Check the Prometheus remote write settings. Secrets are never logged."""
+    if config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_ENABLED:
+        warn_prometheus_ages()
     if not config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_ENABLED:
         return True
 
@@ -137,8 +162,17 @@ def validate_prometheus_config():
     auth = config.WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH
     if not url:
         problems.append("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_URL is not set")
-    elif not url.startswith("https://") and auth != "none":
-        problems.append("the remote write URL must use https when credentials are sent")
+    else:
+        parsed = urlsplit(url)
+        if parsed.username or parsed.password:
+            problems.append(
+                "the remote write URL must not contain a user name or password; use "
+                "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_REMOTE_WRITE_AUTH instead"
+            )
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            problems.append("the remote write URL must be an http or https URL")
+        elif parsed.scheme != "https" and auth != "none":
+            problems.append("the remote write URL must use https when credentials are sent")
 
     if auth not in REMOTE_WRITE_AUTH_MODES:
         problems.append(

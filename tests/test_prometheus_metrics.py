@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from storage.prometheus_metrics import (  # noqa: E402
+    OBSERVED_TIMESTAMP_SUFFIX,
     MetricStore,
     label_name,
     metric_name,
@@ -36,11 +37,15 @@ def make_store(clock=None, **kwargs):
     return MetricStore(clock=clock or Clock(), **kwargs)
 
 
-def series(store):
-    """{(name, labels_dict_items): value} for easy assertions."""
+def series(store, include_timestamps=False):
+    """{(name, labels_dict_items): value} for easy assertions.
+
+    Leaves out the observed-timestamp series unless asked for.
+    """
     return {
         (name, labels): value
         for (name, labels), (value, _o, _u) in store._latest.items()
+        if include_timestamps or not name.endswith(OBSERVED_TIMESTAMP_SUFFIX)
     }
 
 
@@ -138,10 +143,12 @@ def test_exposition_format():
         NOW,
     )
     text = store.exposition()
+    labels = 'collector_type="collector_udp",station_name="Odd \\"name\\"\\\\"'
     assert text == (
         "# TYPE weatherflow_obs_air_temperature gauge\n"
-        'weatherflow_obs_air_temperature{collector_type="collector_udp",'
-        'station_name="Odd \\"name\\"\\\\"} 21.5\n'
+        f"weatherflow_obs_air_temperature{{{labels}}} 21.5\n"
+        "# TYPE weatherflow_obs_observed_timestamp_seconds gauge\n"
+        f"weatherflow_obs_observed_timestamp_seconds{{{labels}}} {NOW!r}\n"
     )
 
 
@@ -164,7 +171,11 @@ def test_drain_dedupes_and_drops_out_of_order():
     store = make_store(clock=clock, queue_samples=True)
     store.add_point("weatherflow_obs", STATION_TAGS, {"air_temperature": 1.0}, NOW - 2)
     store.add_point("weatherflow_obs", STATION_TAGS, {"air_temperature": 2.0}, NOW - 1)
-    drained = store.drain()
+    drained = [
+        entry
+        for entry in store.drain()
+        if not entry[0]["__name__"].endswith(OBSERVED_TIMESTAMP_SUFFIX)
+    ]
     assert len(drained) == 1
     labels, samples = drained[0]
     assert labels["__name__"] == "weatherflow_obs_air_temperature"
@@ -187,3 +198,34 @@ def test_queue_is_bounded():
     for i in range(50):
         store.add_point("weatherflow_obs", STATION_TAGS, {"air_temperature": float(i)}, NOW - 50 + i)
     assert len(store._queue) <= 10
+
+
+def test_observed_timestamp_tracks_the_latest_reading():
+    store = make_store()
+    store.add_point("weatherflow_obs", STATION_TAGS, {"air_temperature": 1.0}, NOW - 30)
+    store.add_point("weatherflow_obs", STATION_TAGS, {"air_temperature": 2.0}, NOW - 90)
+    stamps = {
+        name: value
+        for (name, _labels), value in series(store, include_timestamps=True).items()
+        if name.endswith(OBSERVED_TIMESTAMP_SUFFIX)
+    }
+    assert stamps == {"weatherflow_obs_observed_timestamp_seconds": NOW - 30}
+
+
+def test_forecasts_get_no_observed_timestamp():
+    store = make_store()
+    tags = {"collector_type": "collector_forecasts", "station_name": "Test Station"}
+    store.add_point("weatherflow_forecast_daily", tags, {"air_temp_high": 20.0}, NOW + 3600)
+    names = {name for name, _ in series(store, include_timestamps=True)}
+    assert names == {"weatherflow_forecast_daily_air_temp_high"}
+
+
+def test_lightning_total_grows_once_per_reading():
+    store = make_store()
+    for ts, strikes in ((NOW - 120, 2), (NOW - 120, 2), (NOW - 60, 3), (NOW - 90, 5)):
+        store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": strikes}, ts)
+    found = {name: value for (name, _labels), value in series(store).items()}
+    # The repeat and the out-of-order reading are not counted again.
+    assert found["weatherflow_obs_lightning_strike_count_total"] == 5.0
+    assert found["weatherflow_obs_lightning_strike_count"] == 3.0
+    assert "# TYPE weatherflow_obs_lightning_strike_count_total counter" in store.exposition()

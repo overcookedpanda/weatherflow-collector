@@ -44,6 +44,7 @@ Modifications may be required for use with other systems or data sources.
 
 
 import asyncio
+import sys
 import config
 import logger
 
@@ -191,6 +192,7 @@ async def main_async():
             await asyncio.sleep(3600)  # Sleep for an hour; you can adjust this duration
     except Exception as e:
         logger_main.error(f"Application stopped due to error: {e}")
+        raise
 
 
 if __name__ == "__main__":
@@ -200,3 +202,4 @@ if __name__ == "__main__":
         logger_main.info("Stopping WeatherFlow Collector")
     except Exception as e:
         logger_main.error(f"Application terminated due to an error: {e}")
+        sys.exit(1)  # a non-zero exit lets the container restart policy act

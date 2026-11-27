@@ -11,6 +11,7 @@ os.environ.setdefault("WEATHERFLOW_COLLECTOR_API_TOKEN", "test-token")
 import config  # noqa: E402
 from provider.websocket_server import WebSocketServerProvider  # noqa: E402
 from websockets.asyncio.client import connect  # noqa: E402
+from websockets.exceptions import InvalidStatus  # noqa: E402
 
 DEVICE_ID = 1001
 SERIAL = "ST-00000001"
@@ -143,5 +144,42 @@ def test_refuses_connections_over_the_limit(monkeypatch):
         assert await provider.register(connection, "/") is False
         assert connection.closed_with == 1013
         assert provider.connection_count() == 0
+
+    asyncio.run(scenario())
+
+
+def test_browser_origins_are_refused_unless_listed(monkeypatch):
+    monkeypatch.setattr(
+        config,
+        "WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ORIGINS",
+        ["https://grafana.example"],
+    )
+    assert WebSocketServerProvider.allowed_origins() == [None, "https://grafana.example"]
+
+    async def scenario():
+        provider = WebSocketServerProvider(FakeEventManager(), station_metadata=METADATA)
+        provider.host, provider.port = "127.0.0.1", 0
+        server_task = asyncio.create_task(provider.start_server())
+        for _ in range(100):
+            if provider.server is not None:
+                break
+            await asyncio.sleep(0.01)
+        port = provider.server.sockets[0].getsockname()[1]
+        url = f"ws://127.0.0.1:{port}/collector_udp/{DEVICE_ID}"
+        try:
+            async with connect(url):
+                pass  # no Origin header, like a server-side client
+            async with connect(url, origin="https://grafana.example"):
+                pass
+            refused = False
+            try:
+                async with connect(url, origin="https://other.example"):
+                    pass
+            except InvalidStatus as e:
+                refused = e.response.status_code == 403
+            assert refused
+        finally:
+            provider.server.close()
+            server_task.cancel()
 
     asyncio.run(scenario())

@@ -105,7 +105,7 @@
     {
       "type": "stat",
       "title": "Seconds since last observation",
-      "description": "From the latest sample Prometheus holds for the selected source.",
+      "description": "Age of the station's latest reading, which keeps growing if the station stops reporting even while Prometheus keeps scraping.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -116,7 +116,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "time() - max by (station_name) (timestamp(weatherflow_obs_air_temperature{station_name=~\"$station_name\",collector_type=~\"$collector_type\"}))",
+          "expr": "time() - max by (station_name) (weatherflow_obs_observed_timestamp_seconds{station_name=~\"$station_name\",collector_type=~\"$collector_type\"})",
           "legendFormat": "{{station_name}}",
           "refId": "A",
           "instant": true,
@@ -167,7 +167,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "time() - max by (station_name) (timestamp(weatherflow_rapid_wind_wind_speed{station_name=~\"$station_name\",collector_type=~\"$collector_type\"}))",
+          "expr": "time() - max by (station_name) (weatherflow_rapid_wind_observed_timestamp_seconds{station_name=~\"$station_name\",collector_type=~\"$collector_type\"})",
           "legendFormat": "{{station_name}}",
           "refId": "A",
           "instant": true,

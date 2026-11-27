@@ -49,6 +49,7 @@ class PrometheusStorage:
         )
         self.module_name = "prometheus_handler"
         self.runner = None
+        self.remote_write_task = None
         self.push_count = 0
         self.error_count = 0
 
@@ -79,7 +80,12 @@ class PrometheusStorage:
         self.runner = web.AppRunner(self.make_app(), access_log=None)
         await self.runner.setup()
         site = web.TCPSite(self.runner, host, port)
-        await site.start()
+        try:
+            await site.start()
+        except OSError:
+            await self.runner.cleanup()
+            self.runner = None
+            raise
         logger_PrometheusStorage.info(
             f"Prometheus metrics at http://{host}:{port}/metrics"
         )
@@ -134,11 +140,15 @@ class PrometheusStorage:
             }
             headers.update(self.auth_headers(url, headers, body))
             try:
-                async with session.post(url, data=body, headers=headers) as response:
+                # Redirects are not followed, so signed headers never reach
+                # another host. A 3xx counts as a rejection.
+                async with session.post(
+                    url, data=body, headers=headers, allow_redirects=False
+                ) as response:
                     if 200 <= response.status < 300:
                         sent += len(chunk)
                         continue
-                    detail = (await response.text())[:200]
+                    detail = (await response.read())[:200].decode("utf-8", "replace")
                     retry = response.status in RETRYABLE_STATUSES or response.status >= 500
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 detail, retry = str(e), True
@@ -199,9 +209,22 @@ class PrometheusStorage:
                 logger_PrometheusStorage.error(
                     f"Could not start the Prometheus endpoint: {e}"
                 )
+                if not (
+                    self.remote_write_enabled
+                    or config.WEATHERFLOW_COLLECTOR_STORAGE_INFLUXDB_ENABLED
+                ):
+                    raise  # it was the only output, so don't run without one
         if self.remote_write_enabled:
-            asyncio.create_task(self.remote_write_loop())
+            self.remote_write_task = asyncio.create_task(self.remote_write_loop())
 
     async def close(self):
+        if self.remote_write_task is not None:
+            self.remote_write_task.cancel()
+            try:
+                await self.remote_write_task
+            except asyncio.CancelledError:
+                pass
+            self.remote_write_task = None
         if self.runner is not None:
             await self.runner.cleanup()
+            self.runner = None

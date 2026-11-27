@@ -309,7 +309,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_daily_air_temp_high{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, days_ahead) (weatherflow_forecast_daily_air_temp_high{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -321,7 +321,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_daily_air_temp_low{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, days_ahead) (weatherflow_forecast_daily_air_temp_low{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
@@ -333,7 +333,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_daily_precip_probability{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, days_ahead) (weatherflow_forecast_daily_precip_probability{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "C",
           "instant": true,
@@ -350,10 +350,7 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "collector_type": true,
-              "station_id": true
+              "Time": true
             },
             "renameByName": {
               "Value #A": "High",
@@ -471,7 +468,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_hourly_air_temperature{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, hours_ahead) (weatherflow_forecast_hourly_air_temperature{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -483,7 +480,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_hourly_relative_humidity{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, hours_ahead) (weatherflow_forecast_hourly_relative_humidity{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
@@ -495,7 +492,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_hourly_precip_probability{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, hours_ahead) (weatherflow_forecast_hourly_precip_probability{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "C",
           "instant": true,
@@ -507,7 +504,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_hourly_wind_avg{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, hours_ahead) (weatherflow_forecast_hourly_wind_avg{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "D",
           "instant": true,
@@ -519,7 +516,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "weatherflow_forecast_hourly_sea_level_pressure{station_name=~\"$station_name\"}",
+          "expr": "max by (station_name, hours_ahead) (weatherflow_forecast_hourly_sea_level_pressure{station_name=~\"$station_name\"})",
           "legendFormat": "",
           "refId": "E",
           "instant": true,
@@ -536,10 +533,7 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "collector_type": true,
-              "station_id": true
+              "Time": true
             },
             "renameByName": {
               "Value #A": "Temperature",

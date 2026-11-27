@@ -626,7 +626,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (station_name) (sum_over_time(weatherflow_obs_lightning_strike_count{station_name=~\"$station_name\",collector_type=~\"$collector_type\"}[1h]))",
+          "expr": "sum by (station_name) (increase(weatherflow_obs_lightning_strike_count_total{station_name=~\"$station_name\",collector_type=~\"$collector_type\"}[1h]))",
           "legendFormat": "{{station_name}}",
           "refId": "A",
           "instant": true,

@@ -176,6 +176,15 @@ WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_CLEANUP_CONNECTIONS_INTERVAL = i
         60,
     )
 )
+# Browser origins allowed to connect, comma separated, such as
+# https://grafana.example.com. Clients that send no Origin header, such as
+# Grafana's server-side websocket datasource, are always allowed; browsers
+# always send one, so web pages are refused unless listed here.
+WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 # Prometheus output (off by default)
@@ -242,13 +251,29 @@ WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_DROP_LABELS = _env_list(
 WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SERIES = int(
     os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SERIES", 10000)
 )
-# Series with no new reading for this many seconds are dropped.
+# The defaults follow the REST poll intervals (set further down), so a slower
+# poll never makes readings look too old or series expire between polls.
+_rest_observations_interval = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_OBSERVATIONS_INTERVAL", 60)
+)
+_rest_forecasts_interval = int(
+    os.getenv("WEATHERFLOW_COLLECTOR_COLLECTOR_REST_FORECASTS_FETCH_INTERVAL", 60)
+)
+# Series with no new reading for this many seconds are dropped. Keep it above
+# the forecasts fetch interval.
 WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_STALE_AFTER = int(
-    os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_STALE_AFTER", 900)
+    os.getenv(
+        "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_STALE_AFTER",
+        max(900, 2 * _rest_forecasts_interval, 2 * _rest_observations_interval),
+    )
 )
 # Observations older than this many seconds (a history import) are skipped.
+# Keep it above the REST observations interval.
 WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SAMPLE_AGE = int(
-    os.getenv("WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SAMPLE_AGE", 600)
+    os.getenv(
+        "WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_MAX_SAMPLE_AGE",
+        max(600, 2 * _rest_observations_interval),
+    )
 )
 WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_ENABLED = (
     WEATHERFLOW_COLLECTOR_STORAGE_PROMETHEUS_SCRAPE_ENABLED

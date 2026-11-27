@@ -15,6 +15,12 @@ reshaped:
   with the current time.
 - Observations keep their own timestamps. Ones older than the configured
   maximum age, such as a history import, are skipped.
+- Each observation measurement also gets <measurement>_observed_timestamp_seconds,
+  the time of its latest reading, so dashboards can show how old the data is
+  even when Prometheus scrapes the endpoint, which carries no timestamps.
+- Per-reading counts, such as lightning strikes, also get a running total,
+  <measurement>_<field>_total, that grows once per new reading. Summing the
+  gauge over time would count a held value once per scrape.
 
 It is standard library only, so it can be tested without the web stack.
 """
@@ -33,6 +39,12 @@ FORECAST_DAILY = "weatherflow_forecast_daily"
 FORECAST_HOURLY_DROPPED_LABELS = {"number_of_days_out", "local_day"}
 
 SKIPPED_FIELDS = {"timestamp", "time"}
+
+# Fields that count events in each reading; each also gets a running total.
+COUNTED_FIELDS = {
+    "weatherflow_obs": {"lightning_strike_count"},
+}
+OBSERVED_TIMESTAMP_SUFFIX = "observed_timestamp_seconds"
 
 # Readings stamped this far in the future are treated as clock skew.
 FUTURE_TOLERANCE_SECONDS = 300
@@ -122,6 +134,7 @@ class MetricStore:
         self._last_sent = {}  # key -> timestamp_ms
         self._warned_full = False
         self._warned_queue = False
+        self._counter_names = set()
 
     # Input
 
@@ -185,33 +198,65 @@ class MetricStore:
         label_sets = [labels]
         if self.primary_source and labels.get("collector_type") == self.primary_source:
             label_sets.append({**labels, "collector_type": "primary"})
+        is_observation = measurement not in SNAPSHOT_MEASUREMENTS and measurement not in (
+            FORECAST_HOURLY,
+            FORECAST_DAILY,
+        )
+        counted = COUNTED_FIELDS.get(measurement, set())
 
         with self._lock:
-            for field, raw in fields.items():
-                if field in SKIPPED_FIELDS:
-                    continue
-                value = sample_value(raw)
-                if value is None:
-                    continue
-                name = metric_name(measurement, field)
-                for label_set in label_sets:
-                    key = (name, tuple(sorted(label_set.items())))
-                    self._record(key, value, sample_ts, order_ts, now)
+            for label_set in label_sets:
+                label_items = tuple(sorted(label_set.items()))
+                if is_observation:
+                    name = metric_name(measurement, OBSERVED_TIMESTAMP_SUFFIX)
+                    self._record((name, label_items), sample_ts, sample_ts, order_ts, now)
+                for field, raw in fields.items():
+                    if field in SKIPPED_FIELDS:
+                        continue
+                    value = sample_value(raw)
+                    if value is None:
+                        continue
+                    name = metric_name(measurement, field)
+                    is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
+                    if field in counted and is_new:
+                        self._add_to_total(
+                            (name + "_total", label_items), value, sample_ts, order_ts, now
+                        )
+
+    def _has_room(self):
+        if len(self._latest) < self.max_series:
+            return True
+        if not self._warned_full and self.logger:
+            self.logger.warning(
+                f"Prometheus output holds {self.max_series} series; "
+                "new series are being dropped."
+            )
+            self._warned_full = True
+        return False
 
     def _record(self, key, value, sample_ts, order_ts, now):
+        """Store a value; returns True when it is a newer reading than the last."""
         current = self._latest.get(key)
         if current is None:
-            if len(self._latest) >= self.max_series:
-                if not self._warned_full and self.logger:
-                    self.logger.warning(
-                        f"Prometheus output holds {self.max_series} series; "
-                        "new series are being dropped."
-                    )
-                    self._warned_full = True
-                return
+            if not self._has_room():
+                return False
         elif order_ts < current[1]:
-            return  # older than what we already have
+            return False  # older than what we already have
+        is_new = current is None or order_ts > current[1]
         self._latest[key] = [value, order_ts, now]
+        self._enqueue(key, value, sample_ts)
+        return is_new
+
+    def _add_to_total(self, key, increment, sample_ts, order_ts, now):
+        current = self._latest.get(key)
+        if current is None and not self._has_room():
+            return
+        total = (current[0] if current else 0.0) + increment
+        self._latest[key] = [total, order_ts, now]
+        self._counter_names.add(key[0])
+        self._enqueue(key, total, sample_ts)
+
+    def _enqueue(self, key, value, sample_ts):
         if self.queue_samples:
             if len(self._queue) >= self.max_queued_samples:
                 del self._queue[: len(self._queue) // 10 or 1]
@@ -245,7 +290,8 @@ class MetricStore:
         current_name = None
         for (name, labels), (value, _order, _updated) in items:
             if name != current_name:
-                lines.append(f"# TYPE {name} gauge")
+                kind = "counter" if name in self._counter_names else "gauge"
+                lines.append(f"# TYPE {name} {kind}")
                 current_name = name
             if labels:
                 rendered = ",".join(

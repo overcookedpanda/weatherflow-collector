@@ -49,6 +49,11 @@ class WebSocketServerProvider:
         self.metrics_by_client_type = {}
         self.server = None
 
+    @staticmethod
+    def allowed_origins():
+        """Clients with no Origin header plus any configured browser origins."""
+        return [None, *config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ORIGINS]
+
     def enabled_device_ids(self):
         ids = set()
         for station_info in self.station_metadata.values():
@@ -252,6 +257,7 @@ class WebSocketServerProvider:
                 ping_interval=config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PING_INTERVAL,
                 ping_timeout=config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_PING_TIMEOUT,
                 max_size=MAX_CLIENT_MESSAGE_BYTES,
+                origins=self.allowed_origins(),
             )
         except OSError as e:
             logger_WebSocketServerProvider.error(
