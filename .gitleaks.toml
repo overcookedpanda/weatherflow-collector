@@ -1,0 +1,7 @@
+# Extends gitleaks' default rules. Placeholders in examples are allowed.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder values in templates and docs"
+regexes = ['''<YOUR_[A-Z_]+>''', '''test-token''']
