@@ -42,9 +42,7 @@ The RestForcecastsCollector is specifically designed for integration with the We
 It is tailored to interact with WeatherFlow's REST API and is not intended for standalone use.
 """
 
-import aiohttp
 import asyncio
-import logging
 from datetime import datetime, timedelta
 import time
 

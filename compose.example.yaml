@@ -1,0 +1,24 @@
+# Example deployment. Copy to compose.yaml and put real values in .env
+# (never commit either file with real values).
+services:
+  weatherflow-collector:
+    image: ghcr.io/overcookedpanda/weatherflow-collector:latest # pin to a digest in production
+    container_name: weatherflow-collector
+    restart: unless-stopped
+    # Host networking is needed to receive the Tempest hub's UDP broadcast on 50222.
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    volumes:
+      # Last-good station metadata cache; survives container recreation.
+      - collector-conf:/app/conf
+    env_file: .env
+    environment:
+      TZ: ${TZ:-UTC}
+
+volumes:
+  collector-conf:

@@ -45,10 +45,8 @@ Modifications may be required for use with other systems or data sources.
 
 import asyncio
 import config
-import threading
 import logger
 
-from collector.rest_export import RestExportCollector
 from collector.rest_forecasts import RestForcecastsCollector
 from collector.rest_import import RestImportCollector
 from collector.rest_observations_device import RESTObservationsDeviceCollector
@@ -58,16 +56,11 @@ from collector.udp import UDPCollector
 from collector.websocket import WebsocketCollector
 from event_manager import EventManager
 from processor.collector_data import CollectorDataProcessor
-from processor.export import ExportProcessor
-from provider.websocket_server import WebSocketServerProvider
 from station_metadata_manager import StationMetadataManager
-from storage.file import FileStorage
 from handlers.handler import Handler
 from storage.influxdb import InfluxDBStorage
 from handlers.system_metrics import SystemMetricsHandler
 from config_validator import validate_all
-
-from vineyard_vantage.vineyard_vantage_handler import VineyardVantageHandler
 
 
 # Initialize logger
@@ -116,28 +109,6 @@ async def setup_app():
         event_manager.subscribe("system_metrics_event", system_metrics_handler)
     else:
         logger_main.info("system_metrics_event disabled.")
-
-    if config.WEATHERFLOW_COLLECTOR_STORAGE_FILE_ENABLED:
-        logger_main.info("storage_file enabled.")
-        storage_file = FileStorage(event_manager)
-        event_manager.subscribe("collector_data_event", storage_file)
-    else:
-        logger_main.info("storage_file disabled.")
-
-    if config.WEATHERFLOW_COLLECTOR_COLLECTOR_EXPORT_ENABLED:
-        logger_main.info("export_processor enabled.")
-        export_processor = ExportProcessor(event_manager)
-        event_manager.subscribe("processed_export_event", export_processor)
-    else:
-        logger_main.info("export_processor disabled.")
-
-    if config.WEATHERFLOW_COLLECTOR_PROVIDER_WEBSOCKET_SERVER_ENABLED:
-        logger_main.info("event_manager enabled.")
-        websocket_server_provider = WebSocketServerProvider(event_manager)
-        event_manager.subscribe("processed_data_event", websocket_server_provider)
-        asyncio.create_task(websocket_server_provider.start_server())
-    else:
-        logger_main.info("event_manager disabled.")
 
     if config.WEATHERFLOW_COLLECTOR_COLLECTOR_UDP_ENABLED:
         logger_main.info("collector_udp enabled.")
@@ -191,39 +162,6 @@ async def setup_app():
         asyncio.create_task(collector_rest_import.run_once())
     else:
         logger_main.info("collector_rest_import disabled.")
-
-    if config.WEATHERFLOW_COLLECTOR_COLLECTOR_REST_EXPORT_ENABLED:
-        logger_main.info("collector_rest_export enabled.")
-        collector_rest_export = RestExportCollector(event_manager)
-        asyncio.create_task(collector_rest_export.run_once())
-    else:
-        logger_main.info("collector_rest_export disabled.")
-
-    ## Vineyard Vantage Conditional Startup Start
-
-    if config.WEATHERFLOW_COLLECTOR_VINEYARD_VANTAGE_HANDLER_ENABLED:
-        if config.WEATHERFLOW_COLLECTOR_COLLECTOR_REST_STATS_ENABLED:
-            logger_main.info("vineyard_vantage_handler enabled.")
-            try:
-                vineyard_vantage_handler = VineyardVantageHandler(
-                    event_manager, collector_rest_stats.on_external_notification
-                )
-                event_manager.subscribe(
-                    "processed_data_event", vineyard_vantage_handler
-                )
-            except Exception as e:
-                logger_main.error(f"Failed to initialize vineyard_vantage_handler: {e}")
-                logger_main.info("vineyard_vantage_handler will be disabled.")
-        else:
-            logger_main.warning(
-                "vineyard_vantage_handler is enabled, but collector_rest_stats is disabled. Vineyard Vantage handler will not be initialized."
-            )
-    else:
-        logger_main.info("vineyard_vantage_handler disabled.")
-
-
-## Vineyard Vantage Conditional Startup End
-
 
 async def main_async():
     try:

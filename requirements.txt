@@ -1,7 +1,5 @@
-Requests==2.32.3
-aiohttp==3.9.5
-influxdb_client==1.44.0
-mysql-connector-python==8.4.0
-pandas==2.2.2
-pytz==2024.1
-websockets==12.0
+aiohttp==3.14.4
+influxdb_client==1.49.0
+pytz==2025.2
+requests==2.33.0
+websockets==15.0.1

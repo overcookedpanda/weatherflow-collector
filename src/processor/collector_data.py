@@ -41,13 +41,8 @@ processing diverse data from meteorological sensors.
 """
 
 
-import json
-from datetime import datetime
 
 
-import asyncio
-import inspect
-import threading
 import copy
 
 import utils.utils as utils
@@ -72,14 +67,9 @@ class CollectorDataProcessor:
 
             # Determine the type of collector and publish accordingly
             collector_type = client_data_copy.get("metadata", {}).get("collector_type", "")
-            if collector_type == "rest_export_client":
-                # Publish processed data for rest_export_client
-                await self.event_manager.publish(
-                    "processed_export_event", processed_data, publisher="CollectorDataProcessor.update"
-                )
-            else:
-                # Publish processed data for other collector types
-                await self.event_manager.publish("processed_data_event", processed_data, publisher="CollectorDataProcessor.update")
+            await self.event_manager.publish(
+                "processed_data_event", processed_data, publisher="CollectorDataProcessor.update"
+            )
         except Exception as e:
             logger_CollectorDataProcessor.error(f"Error processing data: {e}")
 

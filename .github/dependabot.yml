@@ -1,0 +1,46 @@
+version: 2
+
+# Dependabot reads its own secrets, separate from Actions secrets: add
+# DOCKERHUB_USERNAME and DOCKERHUB_TOKEN under Settings > Secrets > Dependabot.
+registries:
+  dhi:
+    type: docker-registry
+    url: dhi.io
+    username: ${{secrets.DOCKERHUB_USERNAME}}
+    password: ${{secrets.DOCKERHUB_TOKEN}}
+
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: docker
+    directory: /
+    registries:
+      - dhi
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope

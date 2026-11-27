@@ -26,9 +26,7 @@ Author: Dave Schmid
 Created: 2023-12-17
 """
 
-import aiohttp
 import asyncio
-import logging
 from datetime import datetime, timedelta
 import time
 

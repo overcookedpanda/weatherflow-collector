@@ -1,7 +1,6 @@
 # collector_rest_stats.py
 
 import asyncio
-import logging
 from datetime import datetime, timedelta
 import time
 
