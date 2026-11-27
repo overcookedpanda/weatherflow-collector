@@ -4,7 +4,7 @@
 # `docker login dhi.io` with a Docker Hub account before building.
 
 # Build stage: the DHI Python -dev variant (root, with a shell and pip).
-FROM dhi.io/python:3.13-debian13-dev@sha256:ffb298fd19247236736952037a0e24dc1f8c7c382da8525158f655f89b1ba4aa AS build
+FROM dhi.io/python:3.15-debian13-dev@sha256:e341dc2363f0bd99a058683a9bcbf79b994c4670ded4924a099ed9c1a6cf7f54 AS build
 RUN python3 -m venv /venv
 COPY requirements.txt /tmp/requirements.txt
 RUN /venv/bin/pip install --no-cache-dir --disable-pip-version-check -r /tmp/requirements.txt \
@@ -15,7 +15,7 @@ RUN mkdir -p /app/conf && chown 65532:65532 /app/conf
 # Runtime stage: the matching DHI Python runtime, with no shell or package
 # manager, running as the nonroot user (UID 65532). The venv links to its
 # interpreter, so build and runtime must stay on the same Python tag.
-FROM dhi.io/python:3.13-debian13@sha256:34feca93f54e15dce5d4ee311ed0b01c6ea8a96869e8d2627e20f85696e2e527
+FROM dhi.io/python:3.15-debian13@sha256:ac18385fab4463424ca98f364a8a5b904271dbf681f1c06b14b191108b4080ae
 LABEL org.opencontainers.image.source="https://github.com/overcookedpanda/weatherflow-collector" \
       org.opencontainers.image.description="WeatherFlow Tempest collector (hardened fork of lux4rd0/weatherflow-collector)" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
