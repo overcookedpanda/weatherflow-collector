@@ -12,10 +12,12 @@ on:
 permissions:
   contents: read
 
-# Releases run one at a time and are never cancelled midway, so two runs
-# can't race to move the same tag.
+# Releases run one at a time, in order, and are never cancelled midway, so
+# two runs can't race to move the same tag. queue: max keeps every pending
+# release instead of replacing the waiting one with the newest.
 concurrency:
   group: release
+  queue: max
   cancel-in-progress: false
 
 jobs:
