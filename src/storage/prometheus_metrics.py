@@ -220,6 +220,13 @@ class MetricStore:
         with self._lock:
             for label_set in label_sets:
                 label_items = tuple(sorted(label_set.items()))
+                # _record compares sample times, which the clock replaces for a
+                # future-dated reading, so a replay of one could look new,
+                # including one that falls back inside the tolerance later on.
+                # Skip a replay of a future-dated reading already counted, so it
+                # neither counts again nor moves the series past later readings.
+                if self._is_counted_replay(measurement, counted, fields, label_items, reading_ts):
+                    continue
                 if is_observation:
                     name = metric_name(measurement, OBSERVED_TIMESTAMP_SUFFIX)
                     self._record((name, label_items), sample_ts, sample_ts, order_ts, now)
@@ -233,19 +240,20 @@ class MetricStore:
                     is_new = self._record((name, label_items), value, sample_ts, order_ts, now)
                     if field in counted and is_new:
                         total_key = (name + "_total", label_items)
-                        # _record compares sample times, which the clock
-                        # replaces for a future-dated reading, so a replay of
-                        # one could look new, including one that falls back
-                        # inside the tolerance later on. Remember the
-                        # future-dated readings counted and skip those.
-                        seen = self._counted_reading.get(total_key)
-                        if seen and reading_ts in seen:
-                            continue
                         if (
                             self._add_to_total(total_key, value, sample_ts, order_ts, now)
                             and corrected
                         ):
                             self._remember_future_reading(total_key, reading_ts, now)
+
+    def _is_counted_replay(self, measurement, counted, fields, label_items, reading_ts):
+        for field in counted:
+            if field not in fields:
+                continue
+            total_key = (metric_name(measurement, field) + "_total", label_items)
+            if reading_ts in self._counted_reading.get(total_key, ()):
+                return True
+        return False
 
     def _remember_future_reading(self, total_key, reading_ts, now):
         seen = self._counted_reading.setdefault(total_key, set())

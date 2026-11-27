@@ -281,6 +281,22 @@ def test_lightning_repeat_that_falls_inside_the_tolerance_is_counted_once():
     assert found["weatherflow_obs_lightning_strike_count_total"] == 2.0
 
 
+def test_skipped_repeat_inside_the_tolerance_does_not_block_a_later_reading():
+    clock = Clock()
+    store = make_store(clock)
+    readings = (
+        (NOW, NOW + 301, 2),  # just past the tolerance, so it is corrected
+        (NOW + 2, NOW + 301, 2),  # the same reading again, now inside the tolerance
+        (NOW + 3, NOW + 3, 3),  # a valid reading after it
+    )
+    for now, ts, strikes in readings:
+        clock.now = now
+        store.add_point("weatherflow_obs", STATION_TAGS, {"lightning_strike_count": strikes}, ts)
+    found = {name: value for (name, _labels), value in series(store).items()}
+    assert found["weatherflow_obs_lightning_strike_count_total"] == 5.0
+    assert found["weatherflow_obs_lightning_strike_count"] == 3.0
+
+
 def test_reading_after_a_future_dated_one_still_counts():
     clock = Clock()
     store = make_store(clock)
