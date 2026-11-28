@@ -319,7 +319,9 @@ class RESTForecastsHandler(BaseDataHandler):
                 )
                 fields["calculated_station_pressure"] = station_pressure
 
-            timestamp = hourly.get("time")
+            # "time" becomes the point's timestamp. Keeping it as a field too
+            # makes InfluxDB reject it (422, "time" is a reserved name).
+            timestamp = fields.pop("time", None)
 
             # Calculate the "days out" for this forecast
             if timestamp is not None:

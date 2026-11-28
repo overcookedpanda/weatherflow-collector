@@ -150,6 +150,9 @@ class WebsocketCollector:
         All other messages are expected to contain data relevant to the application and are therefore forwarded.
         """
         while True:
+            # Set before recv() so the finally block can always read it, even
+            # when the first recv() raises.
+            message_processing_start = time.time()
             try:
                 # Wait for a message to be received
                 message = await self.websocket.recv()
@@ -200,6 +203,8 @@ class WebsocketCollector:
                     )
 
             except websockets.ConnectionClosed:
+                # This loop is the only place that reconnects. monitor_connection
+                # just closes a stale socket, which lands here.
                 logger_WebsocketCollector.warning(
                     "WebSocket connection closed, attempting to reconnect."
                 )
@@ -320,8 +325,10 @@ class WebsocketCollector:
                 logger_WebsocketCollector.warning(
                     f"No data received within timeout duration of {timeout_duration_str}. Last event received at {last_event_time}. Restarting connection."
                 )
+                # Only close here. The close raises ConnectionClosed in
+                # receive_and_forward_messages, which reconnects. Reconnecting
+                # here as well opened a second socket on every timeout.
                 await self.close_connection()
-                await self.establish_connection()
 
             await asyncio.sleep(self.timeout_duration)
 
